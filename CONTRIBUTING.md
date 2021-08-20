@@ -1,0 +1,1 @@
+To add guidelines for contributing to the project
