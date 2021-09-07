@@ -441,6 +441,30 @@ def meanVariancePortfolioReturnsTarget(meanVec, sigMat, retTarget, longShort, ma
         #print("minimumVariancePortfolio: Exitflag different than 1 in quadprog")
     return w_opt, Var_opt
 
+def check_missing(df_logret):
+    """
+        function to check the missing values and delete the stocks with missing value
+        
+        Parameters
+        ----------
+        df_logret : pandas.core.frame.DataFrame
+           the price window
+            
+        Returns
+        -------
+        res : pandas.core.frame.DataFrame
+           the price window without missing value
+    """
+    df_logret = df_logret.transpose()
+    flag = np.zeros(len(df_logret))
+    for i in range(len(df_logret)):
+        if df_logret.iloc[i,:].isnull().any():
+            flag[i] = 0
+        else:
+            flag[i] = 1
+    df_logret['missing_flag'] = flag
+    res = df_logret.loc[df_logret['missing_flag'] == 1]
+    return res.transpose()
 
 def rollingwindow_backtest(optimizerName, data, window_size, rebalance_time, maxAlloc=1, riskAversion=0, meanQuantile=0, retTarget=0, longShort=0, lambda_l1=0, lambda_l2=0, assetsOrder=None):
     """
@@ -481,6 +505,8 @@ def rollingwindow_backtest(optimizerName, data, window_size, rebalance_time, max
             log return matrix for each stocks
         w_all: 2d array
             optimal weight for each revalance time
+        rownames: array
+            date time of rolling window test
 
         Notes
         -------
@@ -501,29 +527,49 @@ def rollingwindow_backtest(optimizerName, data, window_size, rebalance_time, max
     portfolio_return = None
     w_all = None
     for i in range(start, n-d, d):
-        window = logret[i-window_size:i]/100
-        sigMat = np.cov(window, rowvar=False)
-        meanVec = np.mean(window, axis=0)/100
+        k = 0
+        w_opt = np.zeros(df1.shape[1])
+        #import pdb; pdb.set_trace()
+        window = check_missing(df_logret[i-window_size:i]/100)
+        m = window.shape[0]
+        sample_stocks = window.columns
+        logret_window = np.array(window.iloc[:n-1])
+        sigMat = np.cov(logret_window, rowvar = False)
+        meanVec = np.mean(logret_window, axis = 0)/100
+
         if optimizerName == "minimumVariancePortfolio":
-            w_opt, _ = minimumVariancePortfolio(sigMat, float(maxAlloc), float(longShort),
+            w_sample, _ = minimumVariancePortfolio(sigMat, float(maxAlloc), float(longShort),
                                                 float(lambda_l1), float(lambda_l2))
 
         elif optimizerName == "meanVariancePortfolioReturnsTarget":
-            w_opt, _ = meanVariancePortfolioReturnsTarget(meanVec, sigMat, float(retTarget),
+            w_sample, _ = meanVariancePortfolioReturnsTarget(meanVec, sigMat, float(retTarget),
                                                           float(maxAlloc), float(longShort), float(lambda_l1), float(lambda_l2))
+
+        for j in range(df1.shape[1]):
+            if df1.columns[j] in sample_stocks:
+                w_opt[j] = w_sample[k]
+                k += 1
 
         if w_all is None:
             w_all = w_opt
         else:
             w_all = np.vstack([w_all, w_opt])
-        if R is None:
-            simple_returns = 100*(math.exp(1)**(logret[i:i+d]/100) - 1)
-            R = np.dot(w_opt, simple_returns.transpose())
-        else:
-            simple_returns = 100*(math.exp(1)**(logret[i:i+d]/100) - 1)
-            R = np.vstack([R, np.dot(w_opt, simple_returns.transpose())])
 
-    return R.flatten().tolist(), logret.tolist(), w_all.tolist()
+        if (i+d) < n :
+            if R is None:
+                logret_sample = np.nan_to_num(logret[i:i+d], nan=0)
+                simple_returns = 100*(math.exp(1)**(logret_sample/100) - 1)
+                R = np.dot(w_opt, simple_returns.transpose())
+            else:
+                logret_sample = np.nan_to_num(logret[i:i+d], nan=0)
+                simple_returns = 100*(math.exp(1)**(logret_sample/100) - 1)
+                R = np.hstack([R, np.dot(w_opt, simple_returns.transpose())])
+        elif (i+d) >= n:
+            logret_sample = np.nan_to_num(logret[i:], nan=0)
+            simple_returns = 100*(math.exp(1)**(logret_sample/100) - 1)
+            R = np.hstack([R, np.dot(w_opt, simple_returns.transpose())])
+    rownames = df1.index[start+1:]
+    return R, df_logret, w_all, rownames
 
 
 if __name__ == "__main__":
