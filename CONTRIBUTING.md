@@ -28,7 +28,7 @@ in this project are the following rules:
 * Do not add obvious comment to code.
 * Do not comment out code, just delete lines.
 * Write rigorous test cases and their explanation.
-* Use NumPy Docstrings for documentation.
+* Use NumPy Docstrings for documentation. See this [example](https://numpydoc.readthedocs.io/en/latest/example.html).
 
 ## Submitting PRs
 
