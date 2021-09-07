@@ -13,6 +13,9 @@
 
 As a Python project, we must follow [PEP 8](https://www.python.org/dev/peps/pep-0008/) and [PEP 20](https://www.python.org/dev/peps/pep-0020/) guidelines.
 
+**Always use package [Black](https://pypi.org/project/black/)**
+
+
 Furthermore, follow the Clean code conventions. The most important
 in this project are the following rules:
 
