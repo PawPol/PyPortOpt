@@ -78,6 +78,28 @@ class TestOptimizer(unittest.TestCase):
         eig, _ = np.linalg.eig(mat)
         self.assertTrue(True)
 
+    def test_sigMatShrinkage(self):
+        a = [[1, 0, 0], [0, 3, 0], [0, 0, 4]]
+        a = np.array(a)
+        l2 = 0.7
+        c = a + l2 * np.mean(np.diag(a)) * np.eye(3)
+        b = o.sigMatShrinkage(a, l2)
+        self.assertTrue(np.allclose(b, c))
+
+    def test_Dmat(self):
+
+        n = 3
+
+        k1 = np.eye(3)
+        k2 = -1.0 * np.ones((3, 3))
+        k2 = np.triu(np.tril(k2, 1))
+        np.fill_diagonal(k2, 0)
+        k2 = k1 + k2
+        k2 = k2[:2, :]
+
+        self.assertTrue(np.allclose(o.Dmat(n, 0), k1))
+        self.assertTrue(np.allclose(o.Dmat(n, 1), k2))
+
 
 if __name__ == "__main__":
     unittest.main()
