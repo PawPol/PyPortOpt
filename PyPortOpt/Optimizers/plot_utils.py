@@ -5,8 +5,7 @@ from matplotlib.pyplot import figure
 import quantstats as qs
 
 
-def prepossessing_ret(R, name)
-
+def prepossessing_ret(R, name):
 	"""
         function get a dataframe of portfolio returns
         
