@@ -58,6 +58,7 @@ class TestOptimizer(unittest.TestCase):
                 13: 95.63,
             },
         }
+        
         meanVec, sigMat = o.preprocessData(data)
 
         self.assertEqual(meanVec.shape[0], 2)
@@ -71,18 +72,20 @@ class TestOptimizer(unittest.TestCase):
         a = np.array(a)
         SPD = np.dot(a.T, a)
         nonSPD = a
-        mat, _ = o.SymPDcovmatrix(SPD, tol=1e-16)
-        self.assertTrue(np.allclose(mat, SPD, atol=1e-16))
 
-        mat, _ = o.SymPDcovmatrix(nonSPD, tol=1e-16)
+        mat, _ = o.SymPDcovmatrix(SPD, tol=1e-8)
+        self.assertTrue(np.allclose(mat, SPD, atol=1e-8))
+
+        mat, _ = o.SymPDcovmatrix(nonSPD, tol=1e-8)
         eig, _ = np.linalg.eig(mat)
-        self.assertTrue(True)
+        self.assertTrue(np.any(eig>0))
 
     def test_sigMatShrinkage(self):
         a = [[1, 0, 0], [0, 3, 0], [0, 0, 4]]
         a = np.array(a)
         l2 = 0.7
         c = a + l2 * np.mean(np.diag(a)) * np.eye(3)
+        
         b = o.sigMatShrinkage(a, l2)
         self.assertTrue(np.allclose(b, c))
 
@@ -98,6 +101,7 @@ class TestOptimizer(unittest.TestCase):
         k2 = k2[:2, :]
 
         self.assertTrue(np.allclose(o.Dmat(n, 0), k1))
+        
         self.assertTrue(np.allclose(o.Dmat(n, 1), k2))
 
 
