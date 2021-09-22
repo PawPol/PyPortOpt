@@ -104,6 +104,32 @@ class TestOptimizer(unittest.TestCase):
         
         self.assertTrue(np.allclose(o.Dmat(n, 1), k2))
 
+    def test_minimumVariancePortfolio(self):
+        data = { "Date": { 0: "2020-01-02", 1: "2020-01-03", 2: "2020-01-06", 3: "2020-01-07", 4: "2020-01-08", 5: "2020-01-09", 6: "2020-01-10", 7: "2020-01-02", 8: "2020-01-03", 9: "2020-01-06", 10: "2020-01-07", 11: "2020-01-08", 12: "2020-01-09", 13: "2020-01-10", }, "Ticker": { 0: "AAPL", 1: "AAPL", 2: "AAPL", 3: "AAPL", 4: "AAPL", 5: "AAPL", 6: "AAPL", 7: "TSLA", 8: "TSLA", 9: "TSLA", 10: "TSLA", 11: "TSLA", 12: "TSLA", 13: "TSLA", }, "Adjusted_Close": { 0: 74.09522915781685, 1: 73.37487600602452, 2: 73.95954620114364, 3: 73.61170443949048, 4: 74.79584660682033, 5: 76.38457068132122, 6: 76.55725808072349, 7: 86.052, 8: 88.602, 9: 90.308, 10: 93.812, 11: 98.428, 12: 96.268, 13: 95.63, } }
+        meanVec, sigMat = o.preprocessData(data)
+        w_opt, var_opt = o.minimumVariancePortfolio(sigMat, longShort = 1)
+
+        w_opt_act = np.array([0.7648703039434211, 0.23496003918260325])
+        var_opt_act = 0.7935675013205794
+
+        self.assertTrue(np.allclose(w_opt, w_opt_act, atol = 1e-8))
+
+        self.assertTrue(np.allclose(var_opt, var_opt_act, atol = 1e-8))
+
+    def test_meanVariancePortfolioReturnsTarget(self):
+        data = { "Date": { 0: "2020-01-02", 1: "2020-01-03", 2: "2020-01-06", 3: "2020-01-07", 4: "2020-01-08", 5: "2020-01-09", 6: "2020-01-10", 7: "2020-01-02", 8: "2020-01-03", 9: "2020-01-06", 10: "2020-01-07", 11: "2020-01-08", 12: "2020-01-09", 13: "2020-01-10", }, "Ticker": { 0: "AAPL", 1: "AAPL", 2: "AAPL", 3: "AAPL", 4: "AAPL", 5: "AAPL", 6: "AAPL", 7: "TSLA", 8: "TSLA", 9: "TSLA", 10: "TSLA", 11: "TSLA", 12: "TSLA", 13: "TSLA", }, "Adjusted_Close": { 0: 74.09522915781685, 1: 73.37487600602452, 2: 73.95954620114364, 3: 73.61170443949048, 4: 74.79584660682033, 5: 76.38457068132122, 6: 76.55725808072349, 7: 86.052, 8: 88.602, 9: 90.308, 10: 93.812, 11: 98.428, 12: 96.268, 13: 95.63, }}
+        meanVec, sigMat = o.preprocessData(data)
+        w_opt, var_opt = o.meanVariancePortfolioReturnsTarget(meanVec, sigMat, retTarget = 30, longShort = 1)
+
+        w_opt_act = np.array([0.7648978785605853, 0.23498106788850331])
+        var_opt_act = 0.7936446615331433
+
+        self.assertTrue(np.allclose(w_opt, w_opt_act, atol = 1e-8))
+
+        self.assertTrue(np.allclose(var_opt, var_opt_act, atol = 1e-8))
+
+
+        
 
 if __name__ == "__main__":
     unittest.main()
