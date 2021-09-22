@@ -514,7 +514,7 @@ def rollingwindow_backtest(optimizerName, data, window_size, rebalance_time, max
     """
     df = pd.DataFrame(data)
 
-    df.columns = ['ticker', 'date', 'price']
+    df.columns = ['date', 'ticker', 'price']
     df1 = df.pivot_table(index=['date'], columns='ticker', values=['price'])
     df1.columns = [col[1] for col in df1.columns.values]
     df_logret = 100*(np.log(df1) - np.log(df1.shift(1)))
@@ -526,7 +526,7 @@ def rollingwindow_backtest(optimizerName, data, window_size, rebalance_time, max
     R = None
     portfolio_return = None
     w_all = None
-    for i in range(start, n-d, d):
+    for i in range(start, n, d):
         k = 0
         w_opt = np.zeros(df1.shape[1])
         #import pdb; pdb.set_trace()
