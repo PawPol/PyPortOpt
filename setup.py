@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 with open("requirements.txt", "r") as f:
     requirements = f.readlines()
@@ -11,6 +11,7 @@ setup(
     author_email="weichuan.deng@stonybrook.edu, ronak.shah@stonybrook.edu",
     url="https://github.com/PawPol/ML_in_QF_AMS520",
     description="A Python library that implements various Portfolio Optimization method",
+    packages = find_packages(),
     install_requires=[req for req in requirements],
     classifiers=[
         "Programming Language :: Python :: 3",
