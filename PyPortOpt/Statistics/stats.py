@@ -180,7 +180,7 @@ def rollingwindow_sortino(df_sub, window_size=5, rebalance_time=1):
     ----------
     df_sub : pandas.core.frame.DataFrame
             portfolio returns
-    whindow_size : int
+    window_size : int
         parameter for the size of rolling window
     rebalance_time : int
         rebalance time of rolling window test
