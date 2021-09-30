@@ -90,13 +90,13 @@ def rolling_sortino_plt(df_sub, window_size=5, rebalance_time=1):
 def rollingwindow_stat(df_sub, window_size=5, rebalance_time=1):
 
     """
-    function get the rolling volativity
+    function to get the rolling volatility
 
     Parameters
     ----------
     df_sub : pandas.core.frame.DataFrame
             portfolio returns
-    whindow_size : int
+    window_size : int
         parameter for the size of rolling window
     rebalance_time : int
         rebalance time of rolling window test
@@ -104,7 +104,7 @@ def rollingwindow_stat(df_sub, window_size=5, rebalance_time=1):
     Returns
     -------
     vol_all : pandas.core.series.Series
-            rolling volativity
+            rolling volatility
     """
     port_ret = df_sub["strategy"]
 
@@ -132,13 +132,13 @@ def rollingwindow_stat(df_sub, window_size=5, rebalance_time=1):
 
 def rollingwindow_shar(df_sub, window_size=5, rebalance_time=1):
     """
-    function get the rolling volativity
+    function get the rolling volatility
 
     Parameters
     ----------
     df_sub : pandas.core.frame.DataFrame
             portfolio returns
-    whindow_size : int
+    window_size : int
         parameter for the size of rolling window
     rebalance_time : int
         rebalance time of rolling window test
@@ -146,7 +146,7 @@ def rollingwindow_shar(df_sub, window_size=5, rebalance_time=1):
     Returns
     -------
     shar_all : pandas.core.series.Series
-            rolling sharp ratio
+            rolling sharpe ratio
     """
     port_ret = df_sub["strategy"]
 
@@ -174,7 +174,7 @@ def rollingwindow_shar(df_sub, window_size=5, rebalance_time=1):
 
 def rollingwindow_sortino(df_sub, window_size=5, rebalance_time=1):
     """
-    function get the rolling volativity
+    function get the rolling volatility
 
     Parameters
     ----------
@@ -187,7 +187,7 @@ def rollingwindow_sortino(df_sub, window_size=5, rebalance_time=1):
 
     Returns
     -------
-    shar_all : pandas.core.series.Series
+    sortino : pandas.core.series.Series
             rolling sortino
     """
     port_ret = df_sub["strategy"]
