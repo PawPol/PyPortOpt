@@ -12,6 +12,7 @@ import pandas as pd
 import osqp
 import scipy as sp
 from scipy import sparse
+from scipy.stats import norm
 
 
 def testFunction():
@@ -452,6 +453,190 @@ def meanVariancePortfolioReturnsTarget(
     # if exitflag!=1:
     # print("minimumVariancePortfolio: Exitflag different than 1 in quadprog")
     return w_opt, Var_opt
+
+
+def reinforcement_learning_portfolio(
+    meanVec,
+    sigMat,
+    invHorizon = 10,
+    initialWealth = 100,
+    wealthGoal = 200,
+    timeStep = 1,
+    numPortfolios = 15,
+    gridGranularity = 10,
+    retFullStrat = False,
+    hParams = None
+):
+    """
+    This function uses the reinforcement learning (RL) approach described in Das & Varma (2020)
+    to choose a portfolio in the efficient frontier for every time step
+
+    :param meanVec: numpy.array
+        vector of expected returns for each asset
+    :param sigMat: numpy.array
+        covariance matrix for the asset returns
+    :param invHorizon: int
+        investment horizon (in years) for the RL problem
+    :param initialWealth: float
+        initial wealth for the RL problem
+    :param wealthGoal: float
+        target wealth for the reward function of the RL problem
+    :param timeStep: float
+        time step ((dt) in years) for the each decision made before getting to the time horizon
+    :param numPortfolios: int
+        number of portfolios to choose from in the efficient frontier
+    :param gridGranularity: int
+        number of state values - 1 considered at each time step
+    :param retFullStrat: Bool
+        if True it will return the full strategy (np.array representing a tensor) for all time steps and states
+    :param hParams: dict
+        hyper-parameters used to train the RL strategy. See Das & Varma for more details
+    :return: numpy.array
+        vector of weights (% allocations) for each asset in the portfolio
+    """
+
+
+    if hParams is None:
+        hParams = {
+            "epsilon" : 0.3,
+            "alpha" : 0.1,
+            "gamma" : 1,
+            "epochs" : 20000
+        }
+
+    # This portion of the code selects equally spaced portfolios in the efficient frontier
+    # the "+ 5" is only to replicate the paper but no really necessary
+
+    numPortGrid = numPortfolios + 5
+    minMu = max(min(meanVec),0)
+    maxMu = max(meanVec)
+    # This is a hard-code to replicate the exact results of the paper
+    # maxMu = 0.0989
+    mu = np.linspace(minMu, maxMu, numPortGrid)
+
+    weights = []
+    sigma = []
+    for mu_i in mu:
+        w, var_i = meanVariancePortfolioReturnsTarget(meanVec,sigMat,mu_i,0)
+        weights.append(w)
+        sigma.append(np.sqrt(var_i))
+
+
+    portfolios = [p for p in zip(mu.squeeze(), sigma.squeeze())]
+    portfolios = np.array(portfolios[1:1 + numPortfolios])
+
+    # Generating possible states following a geometric brownian motion
+
+    gridPoints = invHorizon * gridGranularity + 1
+
+    lnW = np.log(initialWealth)
+    lnwMin = lnW
+    lnwMax = lnW
+    I = np.zeros((invHorizon))
+
+    for t in range(invHorizon):
+        lnwMin = np.log(np.exp(lnwMin) + I[t]) + (min(portfolios[:, 0]) - 0.5 * max(portfolios[:, 1]) ** 2) * timeStep - 3 * max(portfolios[:, 1]) * np.sqrt(timeStep)
+        lnwMax = np.log(np.exp(lnwMax) + I[t]) + (max(portfolios[:, 0]) - 0.5 * max(portfolios[:, 1]) ** 2) * timeStep + 3 * max(portfolios[:, 1]) * np.sqrt(timeStep)
+    W = np.exp(np.linspace(lnwMin, lnwMax, gridPoints)).squeeze()
+
+    maxVec = np.vectorize(lambda x: 1 if x >= wealthGoal else 0)
+
+    Q = np.zeros((gridPoints, invHorizon + 1, numPortfolios))
+    R = np.zeros((gridPoints, invHorizon + 1, numPortfolios))
+    R[:, invHorizon, :] = np.broadcast_to(np.array([maxVec(W)]).T, (gridPoints, numPortfolios))
+
+    for e in range(hParams["epochs"]):
+        Q = rl_update_policy_path(Q, R, invHorizon, timeStep, initialWealth, wealthGoal, portfolios, hParams)
+
+
+    if retFullStrat:
+        return weights, Q, W
+    else:
+        s_i = (W - initialWealth).argmin()
+        return weights[Q[s_i, 0, :].argmax()], None, None
+
+
+def rl_get_next_state(s_t, s_t1, port_i, portfolios, dt):
+    """
+        Based on a given state of the world (s_t) and an action (port_i) this function returns
+        the next (random) state of the world
+
+        Inputs:
+        s_t is a scalar for S at t
+        s_t1 is a vector of values for S at t1
+        port_i is an integer for the index of the portfolio to be used
+
+        Outputs:
+        integer describing the index of the next state in the vector s_t1
+
+    """
+    mu = portfolios[port_i][0]
+    sigma = portfolios[port_i][1]
+    p1 = norm.pdf((np.log(s_t1 / s_t) - (mu - 0.5 * sigma ** 2) * dt) / (sigma * np.sqrt(dt)))
+    p1 = p1 / sum(p1)
+    idx = np.where(np.random.rand() > p1.cumsum())[0]
+    return len(idx)
+
+
+def rl_update_policy_node(i_w, t, Q, R, dt, T, W_0, W, portfolios, hParams):
+    """
+        This function is the core of the Q-learning algorithm. Given the index for a state and a time
+        perform the "Q-update" of the Q-matrix
+
+
+        Inputs:
+        i_w is an integer index for S at t
+        t is an integer index the moment in time
+
+        Outputs:
+        integer describing the index of the next state in the vector of space state
+
+    """
+
+    num_portfolios = len(portfolios)
+    epsilon = hParams["epsilon"]
+    alpha = hParams["alpha"]
+    gamma = hParams["gamma"]
+
+
+    # i_w: index on the wealth axis, t: index on the time axis
+    # Pick optimal action a0 using epsilon greedy approach
+    if np.random.rand() < epsilon:
+        a = np.random.randint(0, num_portfolios)  # index of action; or plug in best action from last step
+    else:
+        q = Q[i_w, t, :]
+        a = np.where(q == q.max())[0]  # Choose optimal Behavior policy
+        if len(a) > 1:
+            a = np.random.choice(a)  # randint(0,NP) #pick randomly from multiple maximizing actions
+        else:
+            a = a[0]
+
+    # Generate next state S’ at t+1, given S at t and action a0, and update State -Action Value Function Q(S,A)
+    t1 = t + 1
+    if t < T:  # at t<T
+        if t == 0:
+            w0 = W_0
+        else:
+            w0 = W[i_w]  # scalar
+        w1 = W  # vector
+        i_w1 = rl_get_next_state(w0, w1, a, portfolios, dt)  # Model-free transition
+        Q[i_w, t, a] = Q[i_w, t, a] + alpha * (R[i_w, t, a] + gamma * Q[i_w1, t1, :].max() - Q[i_w, t, a])  # THIS IS Q-LEARNING
+    else:  # at T
+        Q[i_w, t, a] = (1 - alpha) * Q[i_w, t, a] + alpha * R[i_w, t, a]
+        i_w1 = i_w
+
+    return i_w1, Q  # gives back next state (index of W and t)
+
+
+def rl_update_policy_path(Q, R, T, dt, W_0, W, num_portfolios, hParams):
+    """
+        Run policy node for all time steps until T
+    """
+    i_w = 0
+    for t in range(T+1):
+        i_w, Q = rl_update_policy_node(i_w, t, Q, R, T, dt, W_0, W, num_portfolios, hParams)
+
+    return Q
 
 
 def check_missing(df_logret):
