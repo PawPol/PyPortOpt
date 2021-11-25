@@ -52,19 +52,7 @@ k : int</p>
 <dl class="function">
 <dt id="PyPortOpt.Optimizers.optimizers.SymPDcovmatrix">
 <code class="descclassname">PyPortOpt.Optimizers.optimizers.</code><code class="descname">SymPDcovmatrix</code><span class="sig-paren">(</span><em>A</em>, <em>tol=None</em><span class="sig-paren">)</span><a class="headerlink" href="#PyPortOpt.Optimizers.optimizers.SymPDcovmatrix" title="Permalink to this definition">¶</a></dt>
-<dd><p>function corrects a covariance matrix A to be symmetric positive definite
-it uses eigenvalue decomposition and shifts all small eigenvalues to tol</p>
-<p>A : Array like object
-tol : float</p>
-<blockquote>
-<div>(optional, default tol = 1e-04) minimum value for all eigenvalues</div></blockquote>
-<dl class="docutils">
-<dt>A <span class="classifier-delimiter">:</span> <span class="classifier">Array</span></dt>
-<dd>corrected matrix A.</dd>
-<dt>e_min <span class="classifier-delimiter">:</span> <span class="classifier">float</span></dt>
-<dd>minimum value for all eigenvalues</dd>
-</dl>
-</dd></dl>
+<dd></dd></dl>
 
 <dl class="function">
 <dt id="PyPortOpt.Optimizers.optimizers.check_missing">
@@ -111,26 +99,7 @@ tol : float</p>
 <dl class="function">
 <dt id="PyPortOpt.Optimizers.optimizers.minimumVariancePortfolio">
 <code class="descclassname">PyPortOpt.Optimizers.optimizers.</code><code class="descname">minimumVariancePortfolio</code><span class="sig-paren">(</span><em>sigMat</em>, <em>longShort</em>, <em>maxAlloc=1</em>, <em>lambda_l1=0</em>, <em>lambda_l2=0</em>, <em>assetsOrder=None</em><span class="sig-paren">)</span><a class="headerlink" href="#PyPortOpt.Optimizers.optimizers.minimumVariancePortfolio" title="Permalink to this definition">¶</a></dt>
-<dd><p>Optimizes portfolio for minimum variance</p>
-<p>SigMat : Matrix
-LongShort : Float</p>
-<blockquote>
-<div>Takes value between 0 and 1</div></blockquote>
-<dl class="docutils">
-<dt>maxAlloc <span class="classifier-delimiter">:</span> <span class="classifier">Float</span></dt>
-<dd>Takes value between 0 and 1. Specifies the maximum weight an asset can get</dd>
-<dt>lambda_l1 <span class="classifier-delimiter">:</span> <span class="classifier">Float</span></dt>
-<dd>Takes a value greater than 0. Specifies L1 penalty</dd>
-<dt>lambda_l2 <span class="classifier-delimiter">:</span> <span class="classifier">Float</span></dt>
-<dd>Takes a value greater than 0. Specifies L2 penalty</dd>
-</dl>
-<dl class="docutils">
-<dt>w_opt <span class="classifier-delimiter">:</span> <span class="classifier">Array</span></dt>
-<dd>Returns the weights of given to each asset in form of a numpy array</dd>
-<dt>var_opt <span class="classifier-delimiter">:</span> <span class="classifier">Float</span></dt>
-<dd>Returns the variance of the portfolio</dd>
-</dl>
-</dd></dl>
+<dd></dd></dl>
 
 <dl class="function">
 <dt id="PyPortOpt.Optimizers.optimizers.preprocessData">
