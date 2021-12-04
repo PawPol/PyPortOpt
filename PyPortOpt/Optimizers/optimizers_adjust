@@ -681,9 +681,9 @@ def rollingwindow_backtest(
             )
             
         elif optimizerName == "G-learning:
-          returns = risky_asset_returns.iloc[i].values
-          exp_returns = risky_asset_returns.iloc[i-window_size:i].mean().values
-          sigma_r = risky_asset_returns.iloc[i-window_size:i].cov().values
+          returns = df_logret.iloc[i-d:d].sum(axis=1).values
+          exp_returns = df_logret.iloc[i-window_size:i].mean().values * d
+          sigma_r = df_logret.iloc[i-window_size:i].cov().values * d
           w_sample, g_learner = g_learn_rolling(
               (i-window_size) % num_steps, g_learner, exp_returns, sigma_r, returns
           )
