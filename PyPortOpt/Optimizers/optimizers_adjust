@@ -1,8 +1,8 @@
 """
-The PortOpt application is powered by multiple optimizers designed to implement theory in an elegant 
+The PortOpt application is powered by multiple optimizers designed to implement theory in an elegant
 and easy to use way.
 
-This module consists all the functions required to run a portfolio optimization using parameters 
+This module consists all the functions required to run a portfolio optimization using parameters
 that the user inputs
 """
 import math
@@ -13,7 +13,6 @@ import osqp
 import scipy as sp
 from scipy import sparse
 from G_func_github import *
-
 
 def testFunction():
     """
@@ -130,7 +129,7 @@ def sigMatShrinkage(sigMat, lambda_l2):
         t = np.dot(
             np.mean(sig) * np.eye(d),
             np.eye(d) + (np.ones(d, d) - np.eye(d)) * np.mean(corrs),
-        )
+            )
         sigMat = sigMat + lambda_l2 * np.dot(t, np.mean(sig) * np.eye(d))
     return sigMat
 
@@ -163,7 +162,7 @@ def Dmat(n, k):
 
 
 def minimumVariancePortfolio(
-    sigMat, longShort, maxAlloc=1, lambda_l1=0, lambda_l2=0, assetsOrder=None
+        sigMat, longShort, maxAlloc=1, lambda_l1=0, lambda_l2=0, assetsOrder=None
 ):
     """
     Optimizes portfolio for minimum variance
@@ -298,14 +297,14 @@ def minimumVariancePortfolio(
 
 
 def meanVariancePortfolioReturnsTarget(
-    meanVec,
-    sigMat,
-    retTarget,
-    longShort,
-    maxAlloc=1,
-    lambda_l1=0,
-    lambda_l2=0,
-    assetsOrder=None,
+        meanVec,
+        sigMat,
+        retTarget,
+        longShort,
+        maxAlloc=1,
+        lambda_l1=0,
+        lambda_l2=0,
+        assetsOrder=None,
 ):
     """
     Mean-Variance portfolio for a target return
@@ -470,7 +469,7 @@ class g_learn:
         self.num_risky_assets = num_risky_assets
         self.num_steps = num_steps
         self.num_assets = self.num_risky_assets
-        self.expected_risky_returns = np.empty((window_size, self.num_risky_assets))
+        self.expected_risky_returns = np.empty((self.num_steps, self.num_risky_assets))
         self.sigma = np.empty((self.num_risky_assets, self.num_risky_assets))
 
         lambd = 0.001
@@ -500,7 +499,7 @@ class g_learn:
         self.learner = []
 
     def param_update(self, t, exp_returns, sigma):
-        self.expected_risky_returns[t:] = exp_returns
+        self.expected_risky_returns = exp_returns
         self.sigma = sigma
 
     def run(self, t, exp_returns, sigma):
@@ -569,18 +568,18 @@ def check_missing(df_logret):
 
 
 def rollingwindow_backtest(
-    optimizerName,
-    data,
-    window_size,
-    rebalance_time,
-    maxAlloc=1,
-    riskAversion=0,
-    meanQuantile=0,
-    retTarget=0,
-    longShort=0,
-    lambda_l1=0,
-    lambda_l2=0,
-    assetsOrder=None,
+        optimizerName,
+        data,
+        window_size,
+        rebalance_time,
+        maxAlloc=1,
+        riskAversion=0,
+        meanQuantile=0,
+        retTarget=0,
+        longShort=0,
+        lambda_l1=0,
+        lambda_l2=0,
+        assetsOrder=None,
 ):
     """
     function do the rolling window back test
@@ -641,24 +640,26 @@ def rollingwindow_backtest(
     R = None
     portfolio_return = None
     w_all = None
-    
-    if optimizerName == "G-learning:
-      num_steps = 12
-      num_risky_assets = logret.shape[1]
-      init_cash = 1000
-      x_vals_init = init_cash*np.ones(num_assets) / num_assets
-      g_learner = g_learn(num_steps, num_risky_assets, window_size, x_vals_init)
-    
+
+    if optimizerName == "G-learning":
+        num_steps = 12
+        num_risky_assets = logret.shape[1]
+        init_cash = 1000
+        num_assets = num_risky_assets
+        x_vals_init = init_cash*np.ones(num_assets) / num_assets
+        g_learner = g_learn(num_steps, num_risky_assets, int(window_size/d), x_vals_init)
+        exp_returns = np.empty((num_steps, num_risky_assets))
+
     for i in range(start, n, d):
         k = 0
         w_opt = np.zeros(df1.shape[1])
         # import pdb; pdb.set_trace()
-        window = check_missing(df_logret[i - window_size : i] / 100)
+        window = check_missing(df_logret[i - window_size: i] / 100)
         m = window.shape[0]
         sample_stocks = window.columns
-        logret_window = np.array(window.iloc[: n - 1])
+        logret_window = np.array(window.iloc[: n - 1])  # ??????? m
         sigMat = np.cov(logret_window, rowvar=False)
-        meanVec = np.mean(logret_window, axis=0) / 100
+        meanVec = np.mean(logret_window, axis=0) / 100  # ???????
 
         if optimizerName == "minimumVariancePortfolio":
             w_sample, _ = minimumVariancePortfolio(
@@ -679,14 +680,15 @@ def rollingwindow_backtest(
                 float(lambda_l1),
                 float(lambda_l2),
             )
-            
-        elif optimizerName == "G-learning:
-          returns = df_logret.iloc[i-d:d].sum(axis=1).values
-          exp_returns = df_logret.iloc[i-window_size:i].mean().values * d
-          sigma_r = df_logret.iloc[i-window_size:i].cov().values * d
-          w_sample, g_learner = g_learn_rolling(
-              (i-window_size) % num_steps, g_learner, exp_returns, sigma_r, returns
-          )
+
+        elif optimizerName == "G-learning":
+            print(df_logret.index[i])
+            returns = df_logret.iloc[i-d:i].sum(axis=0).values / 100
+            exp_returns[int((i-start)/d % num_steps):] = meanVec * d
+            sigma_r = sigMat * d
+            w_sample, g_learner = g_learn_rolling(
+                int((i-start)/d % num_steps), g_learner, exp_returns, sigma_r, returns
+            )
 
         for j in range(df1.shape[1]):
             if df1.columns[j] in sample_stocks:
@@ -717,3 +719,5 @@ def rollingwindow_backtest(
 
 if __name__ == "__main__":
     pass
+
+
