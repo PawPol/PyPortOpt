@@ -18,19 +18,19 @@
 
 
 # -- Project information -----------------------------------------------------
-
 import os
 import sys
-sys.path.insert(0, os.path.abspath('/Users/dengkun/Desktop/my_git/PyPortOpt'))
 
-project = 'Portfolio'
-copyright = '2021, PPolak'
-author = 'PPolak'
+sys.path.insert(0, os.path.abspath('../../..'))
+
+project = 'PortOpt'
+copyright = '2021, ..'
+author = '..'
 
 # The short X.Y version
 version = ''
 # The full version, including alpha/beta/rc tags
-release = '1.0'
+release = '0.1'
 
 
 # -- General configuration ---------------------------------------------------
@@ -43,7 +43,7 @@ release = '1.0'
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-        'sphinx.ext.autodoc'
+    'sphinx.ext.autodoc',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -106,7 +106,7 @@ html_static_path = ['_static']
 # -- Options for HTMLHelp output ---------------------------------------------
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'Portfoliodoc'
+htmlhelp_basename = 'PortOptdoc'
 
 
 # -- Options for LaTeX output ------------------------------------------------
@@ -133,8 +133,8 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-    (master_doc, 'Portfolio.tex', 'Portfolio Documentation',
-     'PPolak', 'manual'),
+    (master_doc, 'PortOpt.tex', 'PortOpt Documentation',
+     '..', 'manual'),
 ]
 
 
@@ -143,7 +143,7 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    (master_doc, 'portfolio', 'Portfolio Documentation',
+    (master_doc, 'portopt', 'PortOpt Documentation',
      [author], 1)
 ]
 
@@ -154,7 +154,10 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-    (master_doc, 'Portfolio', 'Portfolio Documentation',
-     author, 'Portfolio', 'One line description of project.',
+    (master_doc, 'PortOpt', 'PortOpt Documentation',
+     author, 'PortOpt', 'One line description of project.',
      'Miscellaneous'),
 ]
+
+
+# -- Extension configuration -------------------------------------------------

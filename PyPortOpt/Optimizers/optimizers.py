@@ -560,9 +560,9 @@ def rollingwindow_backtest(
         window = check_missing(df_logret[i - window_size : i] / 100)
         m = window.shape[0]
         sample_stocks = window.columns
-        logret_window = np.array(window.iloc[: n - 1])
+        logret_window = np.array(window.iloc[: m - 1])
         sigMat = np.cov(logret_window, rowvar=False)
-        meanVec = np.mean(logret_window, axis=0) / 100
+        meanVec = np.mean(logret_window, axis=0)
 
         if optimizerName == "minimumVariancePortfolio":
             w_sample, _ = minimumVariancePortfolio(

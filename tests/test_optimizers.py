@@ -281,10 +281,10 @@ class TestOptimizer(unittest.TestCase):
         }
 
         R, logRet, w, rownames = o.rollingwindow_backtest(
-            "minimumVariancePortfolio", data, 1, 1
+            "minimumVariancePortfolio", data, 2, 1
         )
 
-        R_act = [1.36114529, 1.70487069, 3.26455613, -0.03520845, -0.21832846]
+        R_act = [1.70487069, 3.26455613, -0.03520845, -0.21832846]
         logRet_act = [
             [-0.97695581, 2.9202666],
             [0.79366825, 1.90716194],
@@ -293,7 +293,7 @@ class TestOptimizer(unittest.TestCase):
             [2.10183646, -2.21893478],
             [0.22582112, -0.66493903],
         ]
-        w_act = [[0.5, 0.5], [0.5, 0.5], [0.5, 0.5], [0.5, 0.5], [0.5, 0.5]]
+        w_act = [[0.5, 0.5], [0.5, 0.5], [0.5, 0.5], [0.5, 0.5]]
 
         self.assertTrue(np.allclose(R, R_act, atol=1e-8))
 
