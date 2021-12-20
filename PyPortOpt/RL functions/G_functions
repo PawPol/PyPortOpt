@@ -569,11 +569,17 @@ class G_learning_portfolio_opt:
 
 
 class g_learn:
-    def __init__(self, num_steps, num_risky_assets, window_size, x_vals_init):
+    def __init__(self, num_steps, num_risky_assets, x_vals_init):
+        """
+        A g-learning rolling class
+        :param num_steps: g-learning model number of steps (months here)
+        :param num_risky_assets: number of assets
+        :param x_vals_init: initial cash assigned to each asset at step 1
+        """
         self.num_risky_assets = num_risky_assets
         self.num_steps = num_steps
         self.num_assets = self.num_risky_assets
-        self.expected_risky_returns = np.empty((window_size, self.num_risky_assets))
+        self.expected_risky_returns = np.empty((self.num_steps, self.num_risky_assets))
         self.sigma = np.empty((self.num_risky_assets, self.num_risky_assets))
 
         lambd = 0.001
@@ -587,11 +593,11 @@ class g_learn:
         self.beta = beta
         self.gamma = gamma
         dt = 1/12
-        # self.riskfree_rate = 0.02*dt
         self.x_vals_init = x_vals_init
         self.x_t = self.x_vals_init[:]
         self.x_next = 0
         self.u_t = 0
+        # target portfolio
         target_return = 0.8
         self.benchmark_portf = [x_vals_init.sum() * np.exp(dt * target_return)]
         for i in range(1, self.num_steps):
@@ -603,11 +609,28 @@ class g_learn:
         self.learner = []
 
     def param_update(self, t, exp_returns, sigma):
-        self.expected_risky_returns = exp_returns
+        """
+        update class expected return matrix after and including the t+1th step,
+        and update assets return covariance matrix
+        :param t: the step number (t+1) to be updated
+        :param exp_returns: expected return at the t+1 step
+        :param sigma: assets return covariance matrix at the t+1 step
+        """
+        self.expected_risky_returns[t:] = exp_returns
         self.sigma = sigma
 
     def run(self, t, exp_returns, sigma):
+        """
+        execute g-learning by calling g-learning class with input expected return matrix and covariance matrix updated
+        at the t+1th step, then record the action (cash injection) at the t+1th step and output assets weight
+        :param t: the step number (t+1)
+        :param exp_returns: expected return at the t+1th step
+        :param sigma: assets return covariance matrix at the t+1th step
+        :return: optimal assets weight at the t+1th step
+        """
+        # update the g-learning rolling class expected return matrix and covariance matrix
         self.param_update(t, exp_returns, sigma)
+        # define a g-learning class
         self.learner = G_learning_portfolio_opt(self.num_steps,
                                                 self.reward_params,
                                                 self.beta,
@@ -618,22 +641,30 @@ class g_learn:
                                                 self.sigma,     # covariance matrix of returns of risky matrix
                                                 self.x_vals_init,  # array of initial values of len (num_stocks+1)
                                                 use_for_WM=True)  # use for wealth management tasks
-
+        # initialize time-dependent parameters of prior policy for the g-learning class
         self.learner.reset_prior_policy()
         error_tol = 1.e-8
         max_iter_RL = 200
+        # train the g-learning model
         self.learner.G_learning(error_tol, max_iter_RL)
 
+        # generate actions (cash injection) based on trained optimal policy
         mu_t = self.learner.u_bar_prior[t,:] + self.learner.v_bar_prior[t,:].mv(torch.tensor(self.x_t))
         self.u_t = np.random.multivariate_normal(mu_t.detach().numpy(), self.learner.Sigma_prior[t,:].detach().numpy())
-        # compute new values of x_t
 
+        # compute new values of x_t (cash for each asset)
         self.x_next = self.x_t + self.u_t
+        # compute optimal weight given new values of x_t
         weight = self.x_next / self.x_next.sum()
 
         return weight
 
     def update(self, t, returns):
+        """
+        Record models trajectory and update assets cash with actual returns
+        :param t: the step number (t+1)
+        :param returns: actual returns at the t+1th step
+        """
         self.x_next = (1+returns)*self.x_next
 
         self.trajs[t:] = [[]]*(self.num_steps - t)
@@ -642,9 +673,13 @@ class g_learn:
 
         # rename
         self.x_t = self.x_next
-        # end the loop over time steps
 
-    def update_before_run(self, t):
+    def update_before_step_1(self, t):
+        """
+        At the step 1, we need to update the initial cash assigned to each asset
+        and redefine target portfolio based on initial assets cash
+        :param t: the step number (t+1)
+        """
         if t == 0:
             self.x_vals_init = self.x_t
 
@@ -656,7 +691,16 @@ class g_learn:
 
 
 def g_learn_rolling(t, g_learner, exp_returns, sigma, returns):
-    g_learner.update_before_run(t)
+    """
+    Call g-learning rolling class functions to output optimal weight and update g-learning rolling class
+    :param t: the step number (t+1)
+    :param g_learner: the g-learning rolling class
+    :param exp_returns: expected return at the t+1th step
+    :param sigma: assets return covariance matrix at the t+1th step
+    :param returns: actual returns at the t+1th step
+    :return: optimal weight at the t+1th step, and the updated g_learning rolling class
+    """
+    g_learner.update_before_step_1(t)
 
     weight = g_learner.run(t, exp_returns, sigma)
     g_learner.update(t, returns)
