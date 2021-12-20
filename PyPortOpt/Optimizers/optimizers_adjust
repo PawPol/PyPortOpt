@@ -12,7 +12,7 @@ import pandas as pd
 import osqp
 import scipy as sp
 from scipy import sparse
-from G_func_github import *
+from G_functions import *
 
 def testFunction():
     """
@@ -454,93 +454,6 @@ def meanVariancePortfolioReturnsTarget(
     return w_opt, Var_opt
 
 
-def g_learn_rolling(t, g_learner, exp_returns, sigma, returns):
-    if t == 0:
-        g_learner.x_vals_init = g_learner.x_t
-
-    weight = g_learner.run(t, exp_returns, sigma)
-    g_learner.update(t, returns)
-
-    return weight, g_learner
-
-
-class g_learn:
-    def __init__(self, num_steps, num_risky_assets, window_size, x_vals_init):
-        self.num_risky_assets = num_risky_assets
-        self.num_steps = num_steps
-        self.num_assets = self.num_risky_assets
-        self.expected_risky_returns = np.empty((self.num_steps, self.num_risky_assets))
-        self.sigma = np.empty((self.num_risky_assets, self.num_risky_assets))
-
-        lambd = 0.001
-        omega = 1.0
-        beta = 1000.0
-        gamma = 0.95
-        eta = 1.5  # 1.3 # 1.5 # 1.2
-        rho = 0.4
-
-        self.reward_params = [lambd, omega, eta, rho]
-        self.beta = beta
-        self.gamma = gamma
-        dt = 1/12
-        # self.riskfree_rate = 0.02*dt
-        self.x_vals_init = x_vals_init
-        self.x_t = self.x_vals_init[:]
-        self.x_next = 0
-        self.u_t = 0
-        target_return = 0.8
-        self.benchmark_portf = [x_vals_init.sum() * np.exp(dt * target_return)]
-        for i in range(1, self.num_steps):
-            self.benchmark_portf.append(self.benchmark_portf[i-1]*np.exp(dt * target_return))
-
-        self.trajs = [[]]*self.num_steps
-        self.trajs_all = []
-
-        self.learner = []
-
-    def param_update(self, t, exp_returns, sigma):
-        self.expected_risky_returns = exp_returns
-        self.sigma = sigma
-
-    def run(self, t, exp_returns, sigma):
-        self.param_update(t, exp_returns, sigma)
-        self.learner = G_learning_portfolio_opt(self.num_steps,
-                                                self.reward_params,
-                                                self.beta,
-                                                self.benchmark_portf,
-                                                self.gamma,
-                                                self.num_risky_assets,
-                                                self.expected_risky_returns,  # array of shape num_steps x num_stocks
-                                                self.sigma,     # covariance matrix of returns of risky matrix
-                                                self.x_vals_init,  # array of initial values of len (num_stocks+1)
-                                                use_for_WM=True)  # use for wealth management tasks
-
-        self.learner.reset_prior_policy()
-        error_tol = 1.e-8
-        max_iter_RL = 200
-        self.learner.G_learning(error_tol, max_iter_RL)
-
-        mu_t = self.learner.u_bar_prior[t,:] + self.learner.v_bar_prior[t,:].mv(torch.tensor(self.x_t))
-        self.u_t = np.random.multivariate_normal(mu_t.detach().numpy(), self.learner.Sigma_prior[t,:].detach().numpy())
-        # compute new values of x_t
-
-        self.x_next = self.x_t + self.u_t
-        weight = self.x_next / self.x_next.sum()
-
-        return weight
-
-    def update(self, t, returns):
-        self.x_next = (1+returns)*self.x_next
-
-        self.trajs[t:] = [[]]*(self.num_steps - t)
-        self.trajs[t] = [self.x_t, self.u_t]
-        self.trajs_all.append((self.x_t, self.u_t))
-
-        # rename
-        self.x_t = self.x_next
-        # end the loop over time steps
-
-
 def check_missing(df_logret):
     """
     function to check the missing values and delete the stocks with missing value
@@ -642,13 +555,16 @@ def rollingwindow_backtest(
     w_all = None
 
     if optimizerName == "G-learning":
-        num_steps = 12
-        num_risky_assets = logret.shape[1]
-        init_cash = 1000
-        num_assets = num_risky_assets
-        x_vals_init = init_cash*np.ones(num_assets) / num_assets
-        g_learner = g_learn(num_steps, num_risky_assets, int(window_size/d), x_vals_init)
-        exp_returns = np.empty((num_steps, num_risky_assets))
+        # num_steps = 12
+        # num_risky_assets = logret.shape[1]
+        # init_cash = 1000
+        # num_assets = num_risky_assets
+        # x_vals_init = init_cash*np.ones(num_assets) / num_assets
+        # define a g-learning rolling class
+        g_learner = g_learn(
+            num_steps=12, num_risky_assets=logret.shape[1],
+            x_vals_init=1000*np.ones(logret.shape[1]) / logret.shape[1]
+        )
 
     for i in range(start, n, d):
         k = 0
@@ -657,9 +573,11 @@ def rollingwindow_backtest(
         window = check_missing(df_logret[i - window_size: i] / 100)
         m = window.shape[0]
         sample_stocks = window.columns
-        logret_window = np.array(window.iloc[: n - 1])  # ??????? m
+        # logret_window = np.array(window.iloc[: n - 1])  # ??????? m
+        logret_window = np.array(window.iloc[: m - 1])
         sigMat = np.cov(logret_window, rowvar=False)
-        meanVec = np.mean(logret_window, axis=0) / 100  # ???????
+        # meanVec = np.mean(logret_window, axis=0) / 100  # ???????
+        meanVec = np.mean(logret_window, axis=0)
 
         if optimizerName == "minimumVariancePortfolio":
             w_sample, _ = minimumVariancePortfolio(
@@ -683,11 +601,12 @@ def rollingwindow_backtest(
 
         elif optimizerName == "G-learning":
             print(df_logret.index[i])
-            returns = df_logret.iloc[i-d:i].sum(axis=0).values / 100
-            exp_returns[int((i-start)/d % num_steps):] = meanVec * d
-            sigma_r = sigMat * d
+            # returns = df_logret.iloc[i-d:i].sum(axis=0).values / 100
+            # update the g-learning rolling class
             w_sample, g_learner = g_learn_rolling(
-                int((i-start)/d % num_steps), g_learner, exp_returns, sigma_r, returns
+                t=int((i-start)/d % g_learner.num_steps), g_learner=g_learner,
+                exp_returns=meanVec*d, sigma=sigMat*d,
+                returns=df_logret.iloc[i-d:i].sum(axis=0).values / 100
             )
 
         for j in range(df1.shape[1]):
@@ -718,6 +637,21 @@ def rollingwindow_backtest(
 
 
 if __name__ == "__main__":
-    pass
+    df = pd.read_csv('D:\\SBU (Local)\\Courses Data\\AMS 520\\stock2.csv', header=None)
+    df = df[[1,0,2]]
+    R, df_logret, w_all, rownames = rollingwindow_backtest(
+        optimizerName="G-learning",
+        data=df,
+        window_size=6*21,
+        rebalance_time=21,
+        maxAlloc=1,
+        riskAversion=0,
+        meanQuantile=0,
+        retTarget=0,
+        longShort=0,
+        lambda_l1=0,
+        lambda_l2=0,
+        assetsOrder=None,
+    )
 
 
