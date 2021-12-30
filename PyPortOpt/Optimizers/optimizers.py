@@ -1107,7 +1107,6 @@ def rollingwindow_backtest(
         window = df_logret[i - window_size : i].copy().dropna(axis=1)
         sample_stocks = window.columns
         logret_window = window.values
-
         sigMat = np.cov(logret_window, rowvar=False)
         meanVec = np.mean(logret_window, axis=0)
 
