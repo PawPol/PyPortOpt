@@ -61,7 +61,7 @@ def drawdown_plot(df_sub):
 def rolling_vol_plt(df_sub, window_size=5, rebalance_time=1):
     figure(figsize=(15, 6), dpi=80)
     plt.plot(
-        rollingwindow_stat(df_sub).index, rollingwindow_stat(df_sub), label="strategy"
+        rollingwindow_stat(df_sub, window_size, rebalance_time).index, rollingwindow_stat(df_sub, window_size, rebalance_time), label="strategy"
     )
     plt.title("rolling volatility")
     plt.legend(loc="best")
@@ -70,7 +70,7 @@ def rolling_vol_plt(df_sub, window_size=5, rebalance_time=1):
 def rolling_shar_plt(df_sub, window_size=5, rebalance_time=1):
     figure(figsize=(15, 6), dpi=80)
     plt.plot(
-        rollingwindow_shar(df_sub).index, rollingwindow_shar(df_sub), label="strategy"
+        rollingwindow_shar(df_sub, window_size, rebalance_time).index, rollingwindow_shar(df_sub, window_size, rebalance_time), label="strategy"
     )
     plt.title("rolling sharpe ratio")
     plt.legend(loc="best")
@@ -79,8 +79,8 @@ def rolling_shar_plt(df_sub, window_size=5, rebalance_time=1):
 def rolling_sortino_plt(df_sub, window_size=5, rebalance_time=1):
     figure(figsize=(15, 6), dpi=80)
     plt.plot(
-        rollingwindow_sortino(df_sub).index,
-        rollingwindow_sortino(df_sub),
+        rollingwindow_sortino(df_sub, window_size, rebalance_time).index,
+        rollingwindow_sortino(df_sub, window_size, rebalance_time),
         label="strategy",
     )
     plt.title("rolling sortino")

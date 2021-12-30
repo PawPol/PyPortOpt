@@ -13,6 +13,28 @@ import osqp
 import scipy as sp
 from scipy import sparse
 from scipy.stats import norm
+import logging
+
+
+# create logger
+logger = logging.getLogger("optimizers")
+# set log level for all handlers to debug
+logger.setLevel(logging.INFO)
+
+# create console handler and set level to debug
+# best for development or debugging
+consoleHandler = logging.StreamHandler()
+consoleHandler.setLevel(logging.INFO)
+
+# create formatter
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+# add formatter to ch
+consoleHandler.setFormatter(formatter)
+
+# add ch to logger
+logger.addHandler(consoleHandler)
+
 
 
 def testFunction():
@@ -44,24 +66,26 @@ def preprocessData(data):
     meanVec : Vector
     sigMat : Matrix
     """
-    data = pd.DataFrame.from_dict(data)
-    df = data[["Date", "Ticker", "Adjusted_Close"]]
-    df.columns = ["date", "ticker", "price"]
-    df1 = df.pivot_table(index=["date"], columns="ticker", values=["price"])
-    df1.columns = [col[1] for col in df1.columns.values]
-    df_logret = 100 * (np.log(df1) - np.log(df1.shift(1)))
-    df_logret = df_logret[1:]
-    logret = np.array(df_logret)
 
-    df_daily_returns = df1.pct_change()
+    if isinstance(data, dict):
+        data = pd.DataFrame.from_dict(data)
+        df = data[["Date", "Ticker", "Adjusted_Close"]]
+        df.columns = ["date", "ticker", "price"]
+        df1 = df.pivot_table(index="date", columns="ticker", values="price")
+        # df1.columns = [col[1] for col in df1.columns.values]
+    elif isinstance(data, pd.DataFrame):
+        df1 = data.dropna(axis=1)
+    df_logret = 100*np.log(df1).diff().dropna()
+    logret = df_logret.values
 
-    df_daily_returns = df_daily_returns[1:]
-    data = np.array(data)
-    daily_returns = np.array(df_daily_returns)
-    n = logret.shape[0]
+    # Not used so commented out
+    # df_daily_returns = df1.pct_change().dropna(how='all')
+    # daily_returns = df_daily_returns.values
+    # n = logret.shape[0]
+
     sigMat = np.cov(logret, rowvar=False)
     meanVec = np.mean(logret, axis=0)
-    return meanVec, sigMat
+    return meanVec, sigMat, df_logret
 
 
 def SymPDcovmatrix(A, tol=None):
@@ -116,8 +140,8 @@ def sigMatShrinkage(sigMat, lambda_l2):
     """
     d = sigMat.shape[0]
     sig = np.sqrt(np.diag(sigMat))
-    t = np.dot(np.diag(sig ** (-1)), sigMat)
-    corrMat = np.dot(t, np.diag(sig ** (-1)))
+    t = np.dot(np.diag(1/sig), sigMat)
+    corrMat = np.dot(t, np.diag(1/sig))
     corrs = None
     for k in range(d - 1):
         if corrs is None:
@@ -129,9 +153,9 @@ def sigMatShrinkage(sigMat, lambda_l2):
     else:
         t = np.dot(
             np.mean(sig) * np.eye(d),
-            np.eye(d) + (np.ones(d, d) - np.eye(d)) * np.mean(corrs),
+            np.eye(d) + (np.ones((d, d)) - np.eye(d)) * np.mean(corrs),
         )
-        sigMat = sigMat + lambda_l2 * np.dot(t, np.mean(sig) * np.eye(d))
+        sigMat = sigMat * (1 - lambda_l2) + lambda_l2 * np.dot(t, np.mean(sig) * np.eye(d))
     return sigMat
 
 
@@ -455,141 +479,441 @@ def meanVariancePortfolioReturnsTarget(
     return w_opt, Var_opt
 
 
-def reinforcement_learning_portfolio(
-    meanVec,
-    sigMat,
-    invHorizon = 10,
-    initialWealth = 100,
-    wealthGoal = 200,
-    timeStep = 1,
-    numPortfolios = 15,
-    gridGranularity = 10,
-    retFullStrat = False,
-    hParams = None
-):
-    """
-    This function uses the reinforcement learning (RL) approach described in Das & Varma (2020)
-    to choose a portfolio in the efficient frontier for every time step
-
-    :param meanVec: numpy.array
-        vector of expected returns for each asset
-    :param sigMat: numpy.array
-        covariance matrix for the asset returns
-    :param invHorizon: int
-        investment horizon (in years) for the RL problem
-    :param initialWealth: float
-        initial wealth for the RL problem
-    :param wealthGoal: float
-        target wealth for the reward function of the RL problem
-    :param timeStep: float
-        time step ((dt) in years) for the each decision made before getting to the time horizon
-    :param numPortfolios: int
-        number of portfolios to choose from in the efficient frontier
-    :param gridGranularity: int
-        number of state values - 1 considered at each time step
-    :param retFullStrat: Bool
-        if True it will return the full strategy (np.array representing a tensor) for all time steps and states
-    :param hParams: dict
-        hyper-parameters used to train the RL strategy. See Das & Varma for more details
-    :return: numpy.array
-        vector of weights (% allocations) for each asset in the portfolio
+def unconstrained_mean_variance(M, Sigma):
     """
 
+    :param M:
+    :param Sigma:
+    :return:
+    """
+    logger.debug(Sigma.shape)
+    logger.debug(M.shape)
 
-    if hParams is None:
-        hParams = {
-            "epsilon" : 0.3,
-            "alpha" : 0.1,
-            "gamma" : 1,
-            "epochs" : 20000
-        }
+    SigmaInv = np.linalg.inv(Sigma)
+    n = M.shape[0]
+    O = np.ones((n, 1))
+    k = M.T @ SigmaInv @ O
+    l = M.T @ SigmaInv @ M
+    m = O.T @ SigmaInv @ O
+    g = (SigmaInv @ O * l - SigmaInv @ M * k) / (l * m - k ** 2)
+    h = (SigmaInv @ M * m - SigmaInv @ O * k) / (l * m - k ** 2)
+    a = h.T @ Sigma @ h
+    b = 2 * g.T @ Sigma @ h
+    c = g.T @ Sigma @ g
 
-    # This portion of the code selects equally spaced portfolios in the efficient frontier
-    # the "+ 5" is only to replicate the paper but no really necessary
 
-    numPortGrid = numPortfolios + 5
-    minMu = max(min(meanVec),0)
-    maxMu = max(meanVec)
-    # This is a hard-code to replicate the exact results of the paper
-    # maxMu = 0.0989
+    def efficient_sigma(mu):
+        return np.sqrt( a * mu ** 2 + b * mu + c)
+
+
+    def efficient_portfolio(target_return):
+        return g*target_return + h
+
+    return efficient_sigma, efficient_portfolio
+
+
+
+def transition_probabilities(s_t, s_t1, dt, dist):
+    """
+    This function calculates P(s_t1 | st) according the mean (mu) and volatility (sigma) of a normal distribution.
+
+    Inputs:
+    s_t is a scalar
+    s_t1 is a vector
+    dist is an array of [mean, volatility]
+
+    Outputs:
+    array that describes the pmf of P(s_t1 | st)
+    """
+    mu = dist[0]
+    sigma = dist[1]
+    p1 = norm.pdf((np.log(s_t1 / s_t) - (mu - 0.5 * sigma ** 2) * dt) / (sigma * np.sqrt(dt)))
+    return p1 / sum(p1)
+
+
+def create_portfolio_grid(numPortGrid, meanVec, sigMat, startPort, numPort, shrinkage=0, minMu=None, maxMu=None):
+    """
+    Creates possible portfolios that can be invested in as part of a strategy
+
+    Parameters:
+    -----------
+
+    numPortGrid:
+        Number of total portfolios to generate in the frontier
+    meanVec:
+        Vector of expected returns
+    sigMat:
+        Covariance matrix
+    startPort:
+        First portfolio to use
+    numPort:
+        Number of portfolios to pick from the frontier
+    minMu:
+        Minimum expected return for portfolios in frontier
+    maxMu:
+        Maximum expected return for portfolios in frontier
+
+    Returns:
+    --------
+    portfolios: numpy.array
+        Array of numPortfolios x 2. First column is exp. ret. 2nd column is vol.
+    weights: numpy.array
+        Array of numPortfolios x numAssets. Allocations for each asset on each portfolio.
+    """
+
+    if not minMu:
+        minMu = max(min(meanVec),0)*252
+
+    if not maxMu:
+        maxMu = max(meanVec)*252
+
     mu = np.linspace(minMu, maxMu, numPortGrid)
+
+
+    if shrinkage:
+        sigMat = sigMatShrinkage(sigMat, shrinkage)
+
+    # Two lines below can be used for debugging to match Das & Varma's results exactly.
+    # in practice this optimization is not used often
+
+    # eff_sigma, eff_port = unconstrained_mean_variance(meanVec, sigMat)
+    # sigma = eff_sigma(mu)
 
     weights = []
     sigma = []
     for mu_i in mu:
-        w, var_i = meanVariancePortfolioReturnsTarget(meanVec,sigMat,mu_i,0)
-        weights.append(w)
-        sigma.append(np.sqrt(var_i))
+        w, var_i = meanVariancePortfolioReturnsTarget(meanVec.squeeze()*100, sigMat*100, mu_i*100, 0, lambda_l1=0.5)
+        weights.append(np.clip(w,0,1))
+        sigma.append(np.sqrt(var_i*252/100))
 
-
+    sigma = np.array(sigma)
+    weights = np.array(weights)
     portfolios = [p for p in zip(mu.squeeze(), sigma.squeeze())]
-    portfolios = np.array(portfolios[1:1 + numPortfolios])
+    portfolios = np.array(portfolios[startPort:startPort + numPort])
 
-    # Generating possible states following a geometric brownian motion
+    return portfolios, weights
+
+
+def create_wealth_grid(initialWealth, invHorizon, gridGranularity, dt, portfolios):
+    """
+    Creates wealth grid equally-spaced in log-space
+
+    Parameters:
+    -----------
+    initialWealth: Float
+        Starting wealth
+    invHorizon: Integer
+        Investment horizon in number of years
+    gridGranularity: Integer
+        Number of wealth values to generate per each year. See Das & Varma for more details
+    dt: Float
+        Time step as year fraction
+    portfolios: numpy.array
+        Array of portfolios. Each portfolio represented by mean return and volatility
+
+    Returns:
+    --------
+    W: numpy.array
+        Wealth grid
+    """
 
     gridPoints = invHorizon * gridGranularity + 1
 
     lnW = np.log(initialWealth)
     lnwMin = lnW
     lnwMax = lnW
+
+    # TODO: Change to input for inflows of cash
     I = np.zeros((invHorizon))
 
+    maxMu, maxSigma = portfolios.max(axis=0)
+    minMu, minSigma = portfolios.min(axis=0)
+
     for t in range(invHorizon):
-        lnwMin = np.log(np.exp(lnwMin) + I[t]) + (min(portfolios[:, 0]) - 0.5 * max(portfolios[:, 1]) ** 2) * timeStep - 3 * max(portfolios[:, 1]) * np.sqrt(timeStep)
-        lnwMax = np.log(np.exp(lnwMax) + I[t]) + (max(portfolios[:, 0]) - 0.5 * max(portfolios[:, 1]) ** 2) * timeStep + 3 * max(portfolios[:, 1]) * np.sqrt(timeStep)
+        lnwMin = np.log(np.exp(lnwMin) + I[t]) + (minMu - 0.5 * maxSigma ** 2) * dt - 3 * maxSigma * np.sqrt(dt)
+        lnwMax = np.log(np.exp(lnwMax) + I[t]) + (maxMu - 0.5 * maxSigma ** 2) * dt + 3 * maxSigma * np.sqrt(dt)
     W = np.exp(np.linspace(lnwMin, lnwMax, gridPoints)).squeeze()
 
-    maxVec = np.vectorize(lambda x: 1 if x >= wealthGoal else 0)
-
-    Q = np.zeros((gridPoints, invHorizon + 1, numPortfolios))
-    R = np.zeros((gridPoints, invHorizon + 1, numPortfolios))
-    R[:, invHorizon, :] = np.broadcast_to(np.array([maxVec(W)]).T, (gridPoints, numPortfolios))
-
-    for e in range(hParams["epochs"]):
-        Q = rl_update_policy_path(Q, R, invHorizon, timeStep, initialWealth, wealthGoal, portfolios, hParams)
+    return W
 
 
-    if retFullStrat:
-        return weights, Q, W
-    else:
-        s_i = (W - initialWealth).argmin()
-        return weights[Q[s_i, 0, :].argmax()], None, None
-
-
-def rl_get_next_state(s_t, s_t1, port_i, portfolios, dt):
+def expected_value(s_t, s_t1, v_t1, dt, dist):
     """
-        Based on a given state of the world (s_t) and an action (port_i) this function returns
-        the next (random) state of the world
+        This functions calculates the expected value of v_t1 based on P(s_t1 | st)
 
         Inputs:
         s_t is a scalar for S at t
         s_t1 is a vector of values for S at t1
-        port_i is an integer for the index of the portfolio to be used
+        v_t1 is a vector of values for V at t1
+        dist is an array of [mean, volatility] describing a normal distribution
+
 
         Outputs:
-        integer describing the index of the next state in the vector s_t1
+        scalar with  E_{P(s_t1 | st)}[v_t1]
+    """
+    return transition_probabilities(s_t, s_t1, dt, dist).dot(v_t1)
+
+
+def create_weight_function(wealthGrid, strategy, portfolios):
+    """
+    Takes possible levels of wealth, possible portfolios, and a Q-tensor and turns them
+    into a function
+
+    Parameters:
+    ----------
+    wealthGrid: numpy.array
+        Array with possible levels of wealth
+    strategy: numpy.array
+        Tensor that describes the value function of a RL problem. See q_learning_portfolio function
+        for more details
+    portfolios:
+        Array of possible portfolios
+
+    Returns:
+    --------
+    weight_function: Function
+        See local weight_function documentation
 
     """
-    mu = portfolios[port_i][0]
-    sigma = portfolios[port_i][1]
-    p1 = norm.pdf((np.log(s_t1 / s_t) - (mu - 0.5 * sigma ** 2) * dt) / (sigma * np.sqrt(dt)))
-    p1 = p1 / sum(p1)
-    idx = np.where(np.random.rand() > p1.cumsum())[0]
-    return len(idx)
+    def weight_function(currentWealth, t):
+        """
+        Parameters:
+        ----------
+        currentWealth: Float
+            Current level of wealth
+        t: Integer
+            Index of number of time steps representing moment in time
+
+        Returns:
+        --------
+        weight_function: Function
+
+        """
+        portIndex = np.abs(wealthGrid - currentWealth).argmin()
+        if isinstance(portIndex, np.ndarray):
+            portIndex = portIndex.max()
+        return portfolios[strategy[portIndex, t]]
+
+    return weight_function
 
 
-def rl_update_policy_node(i_w, t, Q, R, dt, T, W_0, W, portfolios, hParams):
+def dynamic_programming_portfolio(
+    meanVec,
+    sigMat,
+    invHorizon=10,
+    initialWealth=100,
+    wealthGoal=200,
+    timeStep=1,
+    numPortfolios=15,
+    gridGranularity=10,
+    gridMaxRet = None,
+    shrinkage=0
+):
     """
-        This function is the core of the Q-learning algorithm. Given the index for a state and a time
-        perform the "Q-update" of the Q-matrix
+    Dynamic programming solution for goal based investment based on Das & Varma (2020)
+
+    Parameters:
+    -----------
+
+    meanVec: numpy.array
+        vector of expected returns for each asset
+    sigMat: numpy.array
+        covariance matrix for the asset returns
+    invHorizon: int
+        investment horizon (in years) for the RL problem
+    initialWealth: float
+        initial wealth for the RL problem
+    wealthGoal: float
+        target wealth for the reward function of the RL problem
+    timeStep: float
+        time step ((dt) in years) for each decision made before getting to the time horizon
+    numPortfolios: int
+        number of portfolios to choose from in the efficient frontier
+    gridGranularity: int
+        number of state values - 1 considered at each time step
+    gridMaxRet: Float
+        Optional. Maximum return to use for possible portfolios
+    shrinkage: Float
+        Optional. Shrinkage coefficient for covariance matrix
+
+    Returns:
+    --------
+
+    weight_function: Function
+       see create_wealth_function for details
+    V: numpy.array
+        Value tensor result of the DP algorithm
+    """
+
+    firstPortfolio = 1
+    extraPortfolios = 5
+    numPeriods = invHorizon*int(1/timeStep)
+    portfolios, weights = create_portfolio_grid(numPortfolios + extraPortfolios, meanVec, sigMat, firstPortfolio, numPortfolios, shrinkage=shrinkage, maxMu=gridMaxRet)
+    logger.debug(portfolios)
+
+    exp_V = np.vectorize(expected_value, signature='(),(n),(n),(),(m)->()')
+    max_vec = np.vectorize(lambda x: 1 if x >= wealthGoal else 0)
+    W = create_wealth_grid(initialWealth, invHorizon, gridGranularity, timeStep, portfolios)
+    grdPoints = len(W)
+
+    logger.debug(W)
+    V = np.zeros((grdPoints, numPeriods + 1))
+    P = np.zeros((grdPoints, numPeriods), dtype=int)
+    V[:, numPeriods] = max_vec(W)
+
+    for t in range(1, numPeriods):
+        for i, s_t in enumerate(W):
+            t_exp_value = exp_V(s_t, W, V[:, numPeriods - t + 1], timeStep, portfolios)
+            V[i, numPeriods - t] = t_exp_value.max()
+            P[i, numPeriods - t] = max(np.where(t_exp_value == V[i, numPeriods - t])[0])
+    V[:, 0] = exp_V(initialWealth, W, V[:, 1], timeStep, portfolios).max()
+    P[:, 0] = exp_V(initialWealth, W, V[:, 1], timeStep, portfolios).argmax()
+
+    weight_function = create_weight_function(W, P, weights)
+
+    return weight_function, V
 
 
-        Inputs:
-        i_w is an integer index for S at t
-        t is an integer index the moment in time
+def q_learning_portfolio(
+    meanVec,
+    sigMat,
+    invHorizon=10,
+    initialWealth=100,
+    wealthGoal=200,
+    timeStep=1,
+    numPortfolios=15,
+    gridGranularity=10,
+    gridMaxRet = None,
+    shrinkage=0,
+    hParams = None,
+    Q = None,
+    returns = None
+):
+    """
+    This function uses the reinforcement learning (RL) approach described in Das & Varma (2020)
+    to choose a portfolio in the efficient frontier for every time step
 
-        Outputs:
-        integer describing the index of the next state in the vector of space state
+    Parameters:
+    -----------
+
+    meanVec: numpy.array
+        vector of expected returns for each asset
+    sigMat: numpy.array
+        covariance matrix for the asset returns
+    invHorizon: int
+        investment horizon (in years) for the RL problem
+    initialWealth: float
+        initial wealth for the RL problem
+    wealthGoal: float
+        target wealth for the reward function of the RL problem
+    timeStep: float
+        time step ((dt) in years) for each decision made before getting to the time horizon
+    numPortfolios: int
+        number of portfolios to choose from in the efficient frontier
+    gridGranularity: int
+        number of state values - 1 considered at each time step
+    gridMaxRet: Float
+        Optional. Maximum return to use for possible portfolios
+    shrinkage: Float
+        Optional. Shrinkage coefficient for covariance matrix
+    Q: numpy.array
+        Optional. Initial values for value tensor
+    returns: numpy.array
+        Optional. Array of num_periods x num_assets daily log-returns.
+        If provided period returns are sampled from empirical distribution instead of
+        GBM based on meanVec and sigMat
+    hParams: dict
+        hyperparameters used to train the RL strategy. See Das & Varma for more details
+
+    Returns:
+    --------
+
+    weight_function: Function
+       see create_wealth_function for details
+    Q: numpy.array
+        Value function trained by the RL algorithm
+    """
+
+    if hParams is None:
+        hParams = {
+            "epsilon" : 0.3,
+            "alpha" : 0.1,
+            "gamma" : 1,
+            "epochs" : 50000
+        }
+
+    # This portion of the code selects equally spaced portfolios in the efficient frontier
+    # the "+ 5" is only to replicate the paper but no really necessary
+    firstPortfolio = 1
+    extraPortfolios = 5
+    numPeriods = invHorizon*int(1/timeStep)
+    portfolios, weights = create_portfolio_grid(numPortfolios + extraPortfolios, meanVec, sigMat, firstPortfolio, numPortfolios, shrinkage=shrinkage, maxMu=gridMaxRet)
+    logger.debug(portfolios)
+
+    # Generating possible states following a geometric brownian motion
+    W = create_wealth_grid(initialWealth, invHorizon, gridGranularity, timeStep, portfolios)
+    gridPoints = len(W)
+    logger.debug(W)
+
+    maxVec = np.vectorize(lambda x: 1 if x >= wealthGoal else 0)
+
+    if Q is None:
+        Q = np.zeros((gridPoints, numPeriods + 1, numPortfolios))
+    R = np.zeros((gridPoints, numPeriods + 1, numPortfolios))
+    R[:, numPeriods, :] = np.broadcast_to(np.array([maxVec(W)]).T, (gridPoints, numPortfolios))
+
+    for e in range(hParams["epochs"]):
+        Q = rl_update_policy_path(Q, R, numPeriods, timeStep, initialWealth, W, portfolios, hParams, returns, weights)
+
+    P = Q.argmax(axis=2)
+    weight_function = create_weight_function(W, P, weights)
+
+    return weight_function, Q
+
+
+def rl_get_next_state(s_t, s_t1, port_i, portfolios, dt, hist=None, weights=None):
+    """
+    Based on a given state of the world (s_t) and an action (port_i) this function returns
+    the next (random) state of the world
+
+    Inputs:
+    s_t is a scalar for S at t
+    s_t1 is a vector of values for S at t1
+    port_i is an integer for the index of the portfolio to be used
+
+    Outputs:
+    integer describing the index of the next state in the vector s_t1
+
+    """
+    if hist is None:
+        mu = portfolios[port_i][0]
+        sigma = portfolios[port_i][1]
+        p1 = norm.pdf((np.log(s_t1 / s_t) - (mu - 0.5 * sigma ** 2) * dt) / (sigma * np.sqrt(dt)))
+        p1 = p1 / sum(p1)
+        idx = np.where(np.random.rand() > p1.cumsum())[0]
+        next_state_index = len(idx)
+    else:
+        logger.debug(weights.sum())
+        logger.debug(weights)
+        logger.debug((hist.sample(int(dt*252)).values @ weights).sum())
+        s_t1_new = s_t*np.exp((hist.sample(int(dt*252)).values @ weights).sum())
+        next_state_index = np.abs(s_t1 - s_t1_new).argmin()
+
+    return next_state_index
+
+
+def rl_update_policy_node(i_w, t, Q, R, T, dt, W_0, W, portfolios, hParams, returns, weights):
+    """
+    This function is the core of the Q-learning algorithm. Given the index for a state and a time
+    perform the "Q-update" of the Q-matrix
+
+
+    Inputs:
+    i_w is an integer index for S at t
+    t is an integer index the moment in time
+
+    Outputs:
+    integer describing the index of the next state in the vector of space state
 
     """
 
@@ -608,6 +932,7 @@ def rl_update_policy_node(i_w, t, Q, R, dt, T, W_0, W, portfolios, hParams):
         a = np.where(q == q.max())[0]  # Choose optimal Behavior policy
         if len(a) > 1:
             a = np.random.choice(a)  # randint(0,NP) #pick randomly from multiple maximizing actions
+            # a = a.max()
         else:
             a = a[0]
 
@@ -619,7 +944,8 @@ def rl_update_policy_node(i_w, t, Q, R, dt, T, W_0, W, portfolios, hParams):
         else:
             w0 = W[i_w]  # scalar
         w1 = W  # vector
-        i_w1 = rl_get_next_state(w0, w1, a, portfolios, dt)  # Model-free transition
+        i_w1 = rl_get_next_state(w0, w1, a, portfolios, dt, returns, weights[a])  # Model-free transition
+        # logger.debug(i_w1)
         Q[i_w, t, a] = Q[i_w, t, a] + alpha * (R[i_w, t, a] + gamma * Q[i_w1, t1, :].max() - Q[i_w, t, a])  # THIS IS Q-LEARNING
     else:  # at T
         Q[i_w, t, a] = (1 - alpha) * Q[i_w, t, a] + alpha * R[i_w, t, a]
@@ -628,13 +954,21 @@ def rl_update_policy_node(i_w, t, Q, R, dt, T, W_0, W, portfolios, hParams):
     return i_w1, Q  # gives back next state (index of W and t)
 
 
-def rl_update_policy_path(Q, R, T, dt, W_0, W, num_portfolios, hParams):
+def rl_update_policy_path(Q, R, T, dt, W_0, W, num_portfolios, hParams, returns, weights):
     """
         Run policy node for all time steps until T
+
+        Parameters:
+        -----------
+        Q: numpy.ndarray
+          Tensor
+        R:
+        T:
+
     """
     i_w = 0
     for t in range(T+1):
-        i_w, Q = rl_update_policy_node(i_w, t, Q, R, T, dt, W_0, W, num_portfolios, hParams)
+        i_w, Q = rl_update_policy_node(i_w, t, Q, R, T, dt, W_0, W, num_portfolios, hParams, returns, weights)
 
     return Q
 
@@ -678,6 +1012,12 @@ def rollingwindow_backtest(
     lambda_l1=0,
     lambda_l2=0,
     assetsOrder=None,
+    initialWealth = 100,
+    wealthGoal= 200,
+    invHorizon = 10,
+    stratUpdateFreq = 12,
+    numPortOpt = 15,
+    useEmpDist = False
 ):
     """
     function do the rolling window back test
@@ -688,14 +1028,14 @@ def rollingwindow_backtest(
         The name of the optimizer to use for rolling window exercise
     data : Dictionary
         Data with Ticker, Date and Adjusted Close price
-    whindow_size : int
-        parameter for the size of rolling window
+    window_size : int
+        parameter for the size of rolling window (>=2)
     rebalance_time : int
         rebalance time of rolling window test
     maxAlloc : Float
         maximum allocation. Takes values between 0 and 1
     riskAversion : Float
-        Riske Aversion for your portfolio. Takes values greater than 0
+        Risk Aversion for your portfolio. Takes values greater than 0
     meanQuantile : Float
         Takes values between 0 and 1
     RetTarget : Float
@@ -708,6 +1048,19 @@ def rollingwindow_backtest(
         Takes a value greater than 0. Specifies L1 penalty
     lambda_l2 : Float
         Takes a value greater than 0. Specifies L2 penalty
+    initialWealth: Float
+        Starting wealth for the dynamic programming case
+    wealthGoal: Float
+        Final target wealth
+    invHorizon: int
+        Number of year until target
+    stratUpdateFreq: int
+        Number of rebalance periods before updating strategy
+    numPortOpt: int
+        Number of portfolio options for DP and RL
+    useEmpDist: bool
+        If True the q_learning algorithm samples from historical returns instead
+        of generating a return from GBM
 
     Returns
     -------
@@ -724,30 +1077,39 @@ def rollingwindow_backtest(
     -------
     Note for now we have provided additional parameters that'll be used in future versions of the optimizers
     """
-    df = pd.DataFrame(data)
+    assert window_size >= 2 , "At least 2 observations are needed to compute a covariance matrix"
 
-    df.columns = ["date", "ticker", "price"]
-    df1 = df.pivot_table(index=["date"], columns="ticker", values=["price"])
-    df1.columns = [col[1] for col in df1.columns.values]
-    df_logret = 100 * (np.log(df1) - np.log(df1.shift(1)))
-    df_logret = df_logret[1:]
-    logret = np.array(df_logret)
+    if isinstance(data, dict):
+        df = pd.DataFrame(data)
+        df.columns = ["date", "ticker", "price"]
+        df1 = df.pivot_table(index="date", columns="ticker", values="price")
+    elif isinstance(data, pd.DataFrame):
+        df1 = data
+    else:
+        ValueError('data type not supported')
+
+    df_logret = np.log(df1).diff().dropna(how='all')
+    logret = df_logret.values
     n = logret.shape[0]
     d = rebalance_time
     start = window_size
     R = None
+    currentWealth = initialWealth
     portfolio_return = None
     w_all = None
-    for i in range(start, n, d):
+    Q = None
+
+    for rebalCount, i in enumerate(range(start, n, d)):
+        logger.info(f'Rebalance number {rebalCount} on day {i}')
         k = 0
         w_opt = np.zeros(df1.shape[1])
         # import pdb; pdb.set_trace()
-        window = check_missing(df_logret[i - window_size : i] / 100)
-        m = window.shape[0]
+        window = df_logret[i - window_size : i].copy().dropna(axis=1)
         sample_stocks = window.columns
-        logret_window = np.array(window.iloc[: n - 1])
+        logret_window = window.values
+
         sigMat = np.cov(logret_window, rowvar=False)
-        meanVec = np.mean(logret_window, axis=0) / 100
+        meanVec = np.mean(logret_window, axis=0)
 
         if optimizerName == "minimumVariancePortfolio":
             w_sample, _ = minimumVariancePortfolio(
@@ -768,6 +1130,48 @@ def rollingwindow_backtest(
                 float(lambda_l1),
                 float(lambda_l2),
             )
+        elif optimizerName == "dynamic_programming":
+            if rebalCount % stratUpdateFreq == 0:
+                strat_sample_stocks = sample_stocks
+                w_func, prob = dynamic_programming_portfolio(
+                    meanVec,
+                    sigMat,
+                    invHorizon= max(invHorizon - math.ceil(rebalCount*rebalance_time/252), 1),
+                    initialWealth=currentWealth,
+                    wealthGoal=wealthGoal,
+                    timeStep=rebalance_time/252,
+                    numPortfolios=numPortOpt,
+                    gridGranularity=10,
+                    shrinkage=lambda_l2
+                )
+                logger.info(f'Probability of success {prob[0, 0]*100:.2f}%')
+            sample_stocks = strat_sample_stocks
+            w_sample = w_func(currentWealth, rebalCount % stratUpdateFreq)
+        elif optimizerName == "q_learning":
+            if rebalCount % stratUpdateFreq == 0:
+                strat_sample_stocks = sample_stocks
+                if useEmpDist:
+                    returns = window
+                else:
+                    returns = None
+                w_func, Q = q_learning_portfolio(
+                    meanVec,
+                    sigMat,
+                    invHorizon= max(invHorizon - math.ceil(rebalCount*rebalance_time/252), 1),
+                    initialWealth=currentWealth,
+                    wealthGoal=wealthGoal,
+                    timeStep=rebalance_time/252,
+                    numPortfolios=numPortOpt,
+                    gridGranularity=10,
+                    shrinkage=lambda_l2,
+                    Q=Q,
+                    returns=returns
+                )
+                logger.info(f'Probability of success {Q[:, 0, :].max()*100:.2f}%')
+            sample_stocks = strat_sample_stocks
+            w_sample = w_func(currentWealth, rebalCount % stratUpdateFreq)
+        else:
+            raise ValueError(f'Optimization type {optimizerName} not defined')
 
         for j in range(df1.shape[1]):
             if df1.columns[j] in sample_stocks:
@@ -780,19 +1184,24 @@ def rollingwindow_backtest(
             w_all = np.vstack([w_all, w_opt])
 
         if (i + d) < n:
+            logret_sample = np.nan_to_num(logret[i: i + d], nan=0)
+            simple_returns = np.exp(logret_sample) - 1
             if R is None:
-                logret_sample = np.nan_to_num(logret[i : i + d], nan=0)
-                simple_returns = 100 * (math.exp(1) ** (logret_sample / 100) - 1)
-                R = np.dot(w_opt, simple_returns.transpose())
+                R = w_opt.dot(simple_returns.T)
             else:
-                logret_sample = np.nan_to_num(logret[i : i + d], nan=0)
-                simple_returns = 100 * (math.exp(1) ** (logret_sample / 100) - 1)
-                R = np.hstack([R, np.dot(w_opt, simple_returns.transpose())])
+                R = np.hstack([R, w_opt.dot(simple_returns.T)])
+
         elif (i + d) >= n:
             logret_sample = np.nan_to_num(logret[i:], nan=0)
-            simple_returns = 100 * (math.exp(1) ** (logret_sample / 100) - 1)
-            R = np.hstack([R, np.dot(w_opt, simple_returns.transpose())])
-    rownames = df1.index[start + 1 :]
+            simple_returns = np.exp(logret_sample) - 1
+            R = np.hstack([R, w_opt.dot(simple_returns.T)])
+
+        currentWealth = initialWealth*(1+R).cumprod()[-1]
+
+
+    rownames = df1.index[start + 1:]
+    R = 1 + R
+    df_logret = df_logret*100
     return R, df_logret, w_all, rownames
 
 
