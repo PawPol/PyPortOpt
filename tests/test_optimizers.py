@@ -3,6 +3,7 @@ import unittest
 import numpy as np
 import pandas as pd
 import logging
+from pathlib import Path
 
 # create logger
 logger = logging.getLogger("tests")
@@ -20,7 +21,6 @@ consoleHandler.setFormatter(formatter)
 
 # add ch to logger
 logger.addHandler(consoleHandler)
-
 
 
 class TestOptimizer(unittest.TestCase):
@@ -250,7 +250,8 @@ class TestOptimizer(unittest.TestCase):
         self.assertTrue(np.allclose(var_opt, var_opt_act, atol=1e-8))
 
     def test_dynamic_programming_portfolio(self):
-        data_df = pd.read_parquet("index_data.parquet")
+        homedir = Path(__name__)
+        data_df = pd.read_parquet(str(homedir.parent / "index_data.parquet"))
         meanVec, sigMat, df_logret = o.preprocessData(data_df.dropna(how='all').iloc[:504, :20])
         meanVec = np.expand_dims(meanVec/100, axis=1)
         dpStrat, dpV = o.dynamic_programming_portfolio(
@@ -266,7 +267,8 @@ class TestOptimizer(unittest.TestCase):
 
 
     def test_q_learning(self):
-        data_df = pd.read_parquet("index_data.parquet")
+        homedir = Path(__name__)
+        data_df = pd.read_parquet(str(homedir.parent / "index_data.parquet"))
         meanVec, sigMat, df_logret = o.preprocessData(data_df.dropna(how='all').iloc[:501, :10])
         meanVec = np.expand_dims(meanVec/100, axis=1)
         hparams = dict(epsilon=0.3, alpha=0.1, gamma=0.9, epochs=10000)
