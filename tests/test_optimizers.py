@@ -1,6 +1,26 @@
 from PyPortOpt import Optimizers as o
 import unittest
 import numpy as np
+import pandas as pd
+import logging
+from pathlib import Path
+
+# create logger
+logger = logging.getLogger("tests")
+logger.setLevel(logging.INFO)
+# create console handler and set level to debug
+# best for development or debugging
+consoleHandler = logging.StreamHandler()
+consoleHandler.setLevel(logging.INFO)
+
+# create formatter
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+# add formatter to ch
+consoleHandler.setFormatter(formatter)
+
+# add ch to logger
+logger.addHandler(consoleHandler)
 
 
 class TestOptimizer(unittest.TestCase):
@@ -59,7 +79,7 @@ class TestOptimizer(unittest.TestCase):
             },
         }
 
-        meanVec, sigMat = o.preprocessData(data)
+        meanVec, sigMat, df_logret = o.preprocessData(data)
 
         self.assertEqual(meanVec.shape[0], 2)
 
@@ -155,9 +175,10 @@ class TestOptimizer(unittest.TestCase):
                 13: 95.63,
             },
         }
-        meanVec, sigMat = o.preprocessData(data)
-        w_opt, var_opt = o.minimumVariancePortfolio(sigMat, longShort=1)
+        meanVec, sigMat, df_logret = o.preprocessData(data)
 
+        w_opt, var_opt = o.minimumVariancePortfolio(sigMat, longShort=1)
+        logger.debug(w_opt)
         w_opt_act = np.array([0.7648703039434211, 0.23496003918260325])
         var_opt_act = 0.7935675013205794
 
@@ -216,7 +237,7 @@ class TestOptimizer(unittest.TestCase):
                 13: 95.63,
             },
         }
-        meanVec, sigMat = o.preprocessData(data)
+        meanVec, sigMat, df_logret = o.preprocessData(data)
         w_opt, var_opt = o.meanVariancePortfolioReturnsTarget(
             meanVec, sigMat, retTarget=30, longShort=1
         )
@@ -227,6 +248,49 @@ class TestOptimizer(unittest.TestCase):
         self.assertTrue(np.allclose(w_opt, w_opt_act, atol=1e-8))
 
         self.assertTrue(np.allclose(var_opt, var_opt_act, atol=1e-8))
+
+    def test_dynamic_programming_portfolio(self):
+        homedir = Path(__name__)
+        try:
+            data_df = pd.read_parquet("/home/runner/work/PyPortOpt/PyPortOpt/tests/index_data.parquet")
+        except FileNotFoundError:
+            data_df = pd.read_parquet(str(homedir.parent / "index_data.parquet"))
+        meanVec, sigMat, df_logret = o.preprocessData(data_df.dropna(how='all').iloc[:504, :20])
+        meanVec = np.expand_dims(meanVec/100, axis=1)
+        dpStrat, dpV = o.dynamic_programming_portfolio(
+                meanVec,
+                sigMat/10000,
+                shrinkage=0,
+                timeStep=1,
+                numPortfolios=15,
+                wealthGoal=200,
+        )
+
+        self.assertAlmostEqual(dpV[0, 0], 0.9998753854829607, 6)
+
+
+    def test_q_learning(self):
+        homedir = Path(__name__)
+        try:
+            data_df = pd.read_parquet("/home/runner/work/PyPortOpt/PyPortOpt/tests/index_data.parquet")
+        except FileNotFoundError:
+            data_df = pd.read_parquet(str(homedir.parent / "index_data.parquet"))
+        meanVec, sigMat, df_logret = o.preprocessData(data_df.dropna(how='all').iloc[:501, :10])
+        meanVec = np.expand_dims(meanVec/100, axis=1)
+        hparams = dict(epsilon=0.3, alpha=0.1, gamma=0.9, epochs=10000)
+        dpStrat, dpV = o.q_learning_portfolio(
+                meanVec,
+                sigMat/10000,
+                shrinkage=0,
+                invHorizon=10,
+                timeStep=1,
+                numPortfolios=15,
+                wealthGoal=200,
+                hParams=hparams
+        )
+        logger.debug(dpV[0, 0].mean())
+        self.assertAlmostEqual(dpV[0, 0].mean(), 0.33784939, 1)
+
 
     def test_rollingWindow(self):
         data = {
@@ -281,19 +345,20 @@ class TestOptimizer(unittest.TestCase):
         }
 
         R, logRet, w, rownames = o.rollingwindow_backtest(
-            "minimumVariancePortfolio", data, 1, 1
+            "minimumVariancePortfolio", data, 2, 1
         )
 
-        R_act = [1.36114529, 1.70487069, 3.26455613, -0.03520845, -0.21832846]
+        R_act = [1.01704871, 1.03264556, 0.99964792, 0.99781672]
+
         logRet_act = [
-            [-0.97695581, 2.9202666],
-            [0.79366825, 1.90716194],
+            [-0.97695581, 2.9202666 ],
+            [ 0.79366825, 1.90716194],
             [-0.471423, 3.80667295],
-            [1.5958316, 4.80325368],
-            [2.10183646, -2.21893478],
-            [0.22582112, -0.66493903],
+            [ 1.5958316, 4.80325368],
+            [ 2.10183646, -2.21893478],
+            [ 0.22582112, -0.66493903]
         ]
-        w_act = [[0.5, 0.5], [0.5, 0.5], [0.5, 0.5], [0.5, 0.5], [0.5, 0.5]]
+        w_act = [[0.5, 0.5], [0.5, 0.5], [0.5, 0.5], [0.5, 0.5]]
 
         self.assertTrue(np.allclose(R, R_act, atol=1e-8))
 
