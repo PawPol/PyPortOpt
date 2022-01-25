@@ -1173,7 +1173,7 @@ def rollingwindow_backtest(
             w_sample = w_func(currentWealth, rebalCount % stratUpdateFreq)
 
         elif optimizerName == "G-learning":
-            if i == 0:
+            if i == start:
                 g_learner = g_learn(
                     num_steps=12, num_risky_assets=logret.shape[1],
                     x_vals_init=1000*np.ones(logret.shape[1]) / logret.shape[1]
