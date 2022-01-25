@@ -291,6 +291,13 @@ class TestOptimizer(unittest.TestCase):
         logger.debug(dpV[0, 0].mean())
         self.assertAlmostEqual(dpV[0, 0].mean(), 0.33784939, 1)
 
+    def test_g_learning(self):
+        homedir = Path(__name__)
+        try:
+            data_df = pd.read_parquet("/home/runner/work/PyPortOpt/PyPortOpt/tests/index_data.parquet")
+        except FileNotFoundError:
+            data_df = pd.read_parquet(str(homedir.parent / "index_data.parquet"))
+
 
     def test_rollingWindow(self):
         data = {

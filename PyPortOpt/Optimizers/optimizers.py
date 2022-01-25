@@ -14,6 +14,7 @@ import scipy as sp
 from scipy import sparse
 from scipy.stats import norm
 import logging
+from G_functions import *
 
 
 # create logger
@@ -1146,6 +1147,7 @@ def rollingwindow_backtest(
                 logger.info(f'Probability of success {prob[0, 0]*100:.2f}%')
             sample_stocks = strat_sample_stocks
             w_sample = w_func(currentWealth, rebalCount % stratUpdateFreq)
+
         elif optimizerName == "q_learning":
             if rebalCount % stratUpdateFreq == 0:
                 strat_sample_stocks = sample_stocks
@@ -1169,6 +1171,19 @@ def rollingwindow_backtest(
                 logger.info(f'Probability of success {Q[:, 0, :].max()*100:.2f}%')
             sample_stocks = strat_sample_stocks
             w_sample = w_func(currentWealth, rebalCount % stratUpdateFreq)
+
+        elif optimizerName == "G-learning":
+            if i == 0:
+                g_learner = g_learn(
+                    num_steps=12, num_risky_assets=logret.shape[1],
+                    x_vals_init=1000*np.ones(logret.shape[1]) / logret.shape[1]
+                )
+            w_sample, g_learner = g_learn_rolling(
+                t=int((i-start)/d % g_learner.num_steps), g_learner=g_learner,
+                exp_returns=meanVec*d, sigma=sigMat*d,
+                returns=df_logret.iloc[i-d:i].sum(axis=0).values / 100
+            )
+
         else:
             raise ValueError(f'Optimization type {optimizerName} not defined')
 
