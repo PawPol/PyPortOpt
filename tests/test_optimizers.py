@@ -283,7 +283,7 @@ class TestOptimizer(unittest.TestCase):
         )
 
         logger.debug(dpV[0, 0])
-        self.assertAlmostEqual(dpV[0, 0], 0.9998140711804528, 6)
+        self.assertAlmostEqual(dpV[0, 0], 0.9998140711804528, 5)
 
 
     def test_q_learning(self):
