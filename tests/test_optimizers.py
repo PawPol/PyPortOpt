@@ -5,13 +5,25 @@ import pandas as pd
 import logging
 from pathlib import Path
 
+##################
+#  LOGGING SETUP #
+##################
+debug = False
+
+if debug:
+    logMode = logging.DEBUG
+else:
+    logMode = logging.INFO
+
 # create logger
 logger = logging.getLogger("tests")
-logger.setLevel(logging.INFO)
+# set log level for all handlers to debug
+logger.setLevel(logMode)
+
 # create console handler and set level to debug
 # best for development or debugging
 consoleHandler = logging.StreamHandler()
-consoleHandler.setLevel(logging.INFO)
+consoleHandler.setLevel(logMode)
 
 # create formatter
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -21,6 +33,9 @@ consoleHandler.setFormatter(formatter)
 
 # add ch to logger
 logger.addHandler(consoleHandler)
+######################
+#  END LOGGING SETUP #
+######################
 
 
 class TestOptimizer(unittest.TestCase):
@@ -264,9 +279,11 @@ class TestOptimizer(unittest.TestCase):
                 timeStep=1,
                 numPortfolios=15,
                 wealthGoal=200,
+                cashInjection=10,
         )
 
-        self.assertAlmostEqual(dpV[0, 0], 0.9998753854829607, 6)
+        logger.debug(dpV[0, 0])
+        self.assertAlmostEqual(dpV[0, 0], 0.9998140711804528, 6)
 
 
     def test_q_learning(self):
@@ -286,10 +303,11 @@ class TestOptimizer(unittest.TestCase):
                 timeStep=1,
                 numPortfolios=15,
                 wealthGoal=200,
+                cashInjection=10,
                 hParams=hparams
         )
         logger.debug(dpV[0, 0].mean())
-        self.assertAlmostEqual(dpV[0, 0].mean(), 0.33784939, 1)
+        self.assertAlmostEqual(dpV[0, 0].mean(), 0.33328700206297307, 1)
 
 
     def test_rollingWindow(self):
@@ -348,7 +366,9 @@ class TestOptimizer(unittest.TestCase):
             "minimumVariancePortfolio", data, 2, 1
         )
 
-        R_act = [1.01704871, 1.03264556, 0.99964792, 0.99781672]
+        logger.debug(R)
+
+        R_act = [1.70487069, 3.26455613, -0.03520845, -0.21832846]
 
         logRet_act = [
             [-0.97695581, 2.9202666 ],

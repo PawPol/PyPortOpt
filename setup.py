@@ -5,7 +5,7 @@ with open("requirements.txt", "r") as f:
 
 setup(
     name="PyPortOpt",
-    version="0.1",
+    version="0.2.0",
     license="MIT",
     author="Weichuan Deng, Ronak Shah",
     author_email="weichuan.deng@stonybrook.edu, ronak.shah@stonybrook.edu",
