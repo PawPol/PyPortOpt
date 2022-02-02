@@ -14,7 +14,7 @@ import scipy as sp
 from scipy import sparse
 from scipy.stats import norm
 import logging
-from G_functions import *
+from .G_functions import *
 
 
 # create logger
