@@ -179,8 +179,8 @@ class TestOptimizer(unittest.TestCase):
 
         w_opt, var_opt = o.minimumVariancePortfolio(sigMat, longShort=1)
         logger.debug(w_opt)
-        w_opt_act = np.array([0.7648703039434211, 0.23496003918260325])
-        var_opt_act = 0.7935675013205794
+        w_opt_act = np.array([0.76501967, 0.23498033])
+        var_opt_act = 0.7938368339598902
 
         self.assertTrue(np.allclose(w_opt, w_opt_act, atol=1e-8))
 
@@ -241,7 +241,7 @@ class TestOptimizer(unittest.TestCase):
         w_opt, var_opt = o.meanVariancePortfolioReturnsTarget(
             meanVec, sigMat, retTarget=0.3, longShort=1
         )
-        
+
         w_opt_act = np.array([0.76501967, 0.23498033])
         var_opt_act = 0.793836833918808
 
