@@ -216,29 +216,11 @@ def minimumVariancePortfolio(
     if assetsOrder:
         temp = sigMat[:, assetsOrder]
         sigMat = temp[assetsOrder, :]
-
-    if lambda_l1 < 0:
-        msg = (
-                "lambda_l1 must either be None negative, "
-                f"{lambda_l1} was passed"
-                )
-        raise ValueError(msg)
-    if lambda_l2 < 0:
-        msg = (
-                "lambda_l2 must either be None negative, "
-                f"{lambda_l2} was passed"
-                )
-        raise ValueError(msg)
-    if len(sigMat) != len(sigMat[0]):
-        msg = (
-                "sigMat must be suqre matrix"
-                ) 
-        raise ValueError(msg)
     if lambda_l2:
-        sigMat_l2  = sigMatShrinkage(sigMat,lambda_l2)
-        sigMat_l2, e_min  = SymPDcovmatrix(sigMat_l2)
+        sigMat_l2 = sigMatShrinkage(sigMat, lambda_l2)
+        sigMat_l2, e_min = SymPDcovmatrix(sigMat_l2)
     else:
-        sigMat, e_min  = SymPDcovmatrix(sigMat)
+        sigMat, e_min = SymPDcovmatrix(sigMat)
 
     if longShort == 0:
         Aeq = np.ones(d)
@@ -303,16 +285,15 @@ def minimumVariancePortfolio(
         Beq = np.hstack([np.zeros(d), 1])
         LB = np.hstack([-Grenze * np.ones(d), np.zeros(2 * d)])
         UB = maxAlloc * np.ones(3 * d)
-        
         if lambda_l2:
             sigMat3d = np.vstack([
-            np.hstack([sigMat_l2, np.zeros((d,2*d))]),
-            np.zeros((2*d,3*d))
+                np.hstack([sigMat_l2, np.zeros((d, 2 * d))]),
+                np.zeros((2 * d, 3 * d))
             ])
         else:
             sigMat3d = np.vstack([
-                np.hstack([sigMat, np.zeros((d,2*d))]),
-                np.zeros((2*d,3*d))
+                np.hstack([sigMat, np.zeros((d, 2 * d))]),
+                np.zeros((2 * d, 3 * d))
             ])
 
         sigMat3d = sigMat3d + np.diag(
@@ -333,7 +314,7 @@ def minimumVariancePortfolio(
 
         prob = osqp.OSQP()
         # Setup workspace
-        prob.setup(sigMat3d, -meanvec3d, A, l, u, verbose=False, max_iter = 10000, eps_abs=1e-8, eps_rel = 1e-8,eps_prim_inf = 1e-8,eps_dual_inf = 1e-8)
+        prob.setup(sigMat3d, -meanvec3d, A, l, u, verbose=False, eps_abs=1e-8, eps_rel = 1e-8,eps_prim_inf = 1e-8,eps_dual_inf = 1e-8)
         # Solve problem
         res = prob.solve()
         wuv_opt = res.x
@@ -352,14 +333,14 @@ def minimumVariancePortfolio(
 
 
 def meanVariancePortfolioReturnsTarget(
-    meanVec,
-    sigMat,
-    retTarget,
-    longShort,
-    maxAlloc=1,
-    lambda_l1=0,
-    lambda_l2=0,
-    assetsOrder=None,
+        meanVec,
+        sigMat,
+        retTarget,
+        longShort,
+        maxAlloc=1,
+        lambda_l1=0,
+        lambda_l2=0,
+        assetsOrder=None,
 ):
     """
     Mean-Variance portfolio for a target return
@@ -404,7 +385,7 @@ def meanVariancePortfolioReturnsTarget(
         sigMat_l2, e_min = SymPDcovmatrix(sigMat_l2)
     else:
         sigMat, e_min = SymPDcovmatrix(sigMat)
-    #import pdb; pdb.set_trace()
+    # import pdb; pdb.set_trace()
     if longShort == 0:
         Aeq = np.ones(d)
         Beq = 1
@@ -423,17 +404,17 @@ def meanVariancePortfolioReturnsTarget(
             A = -meanVec
             B = -tau
             L_ine = -np.inf
-        
+
         if lambda_l1:
             meanVec = -lambda_l1 * np.ones(d)
         else:
             meanVec = -np.zeros(d)
-            
+
         if lambda_l2:
             P = sparse.csc_matrix(sigMat_l2)
         else:
             P = sparse.csc_matrix(sigMat)
-            
+
         A = np.vstack([A, Aeq, np.eye(d)])
         l = np.hstack([L_ine, Beq, LB])
         u = np.hstack([B, Beq, UB])
@@ -441,7 +422,8 @@ def meanVariancePortfolioReturnsTarget(
 
         prob = osqp.OSQP()
         # Setup workspace
-        prob.setup(P, -meanVec, A, l, u, verbose=False, max_iter = 10000, eps_abs=1e-8, eps_rel = 1e-8,eps_prim_inf = 1e-8,eps_dual_inf = 1e-8)
+        prob.setup(P, -meanVec, A, l, u, verbose=False, max_iter=10000, eps_abs=1e-8, eps_rel=1e-8, eps_prim_inf=1e-8,
+                   eps_dual_inf=1e-8)
         # Solve problem
         res = prob.solve()
         w_opt = res.x
@@ -475,7 +457,7 @@ def meanVariancePortfolioReturnsTarget(
         Beq = np.hstack([np.zeros(d), 1])
         LB = np.hstack([-Grenze * np.ones(d), np.zeros(2 * d)])
         UB = maxAlloc * np.ones(3 * d)
-        
+
         if lambda_l2:
             sigMat3d = np.vstack(
                 [np.hstack([sigMat_l2, np.zeros((d, 2 * d))]), np.zeros((2 * d, 3 * d))]
@@ -484,7 +466,7 @@ def meanVariancePortfolioReturnsTarget(
             sigMat3d = np.vstack(
                 [np.hstack([sigMat, np.zeros((d, 2 * d))]), np.zeros((2 * d, 3 * d))]
             )
-            
+
         sigMat3d = sigMat3d + np.diag(
             np.hstack([-0.1 * e_min * np.ones(d), 0.1 * e_min * np.ones(2 * d)])
         )
@@ -501,7 +483,8 @@ def meanVariancePortfolioReturnsTarget(
         sigMat3d = sparse.csc_matrix(sigMat3d)
         prob = osqp.OSQP()
         # Setup workspace
-        prob.setup(sigMat3d, -meanvec3d, A, l, u, verbose=False, eps_abs=1e-8, eps_rel = 1e-8,eps_prim_inf = 1e-8,eps_dual_inf = 1e-8)
+        prob.setup(sigMat3d, -meanvec3d, A, l, u, verbose=False, eps_abs=1e-8, eps_rel=1e-8, eps_prim_inf=1e-8,
+                   eps_dual_inf=1e-8)
         # Solve problem
         res = prob.solve()
         wuv_opt = res.x
@@ -516,7 +499,6 @@ def meanVariancePortfolioReturnsTarget(
     # if exitflag!=1:
     # print("minimumVariancePortfolio: Exitflag different than 1 in quadprog")
     return w_opt, Var_opt
-
 
 
 def unconstrained_mean_variance(M, Sigma):
