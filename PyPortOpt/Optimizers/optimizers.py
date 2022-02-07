@@ -497,14 +497,14 @@ def unconstrained_mean_variance(M, Sigma):
     """
     Pure linear algebra solution for a mean variance portfolio optimization problem without constraints
 
-    Parameters:
-    -----------
-    M: numpy.array
+    Parameters
+    ----------
+    M: numpy.ndarray
         Vector of expected returns for assets
-    Sigma: numpy.array
+    Sigma: numpy.ndarray
         Covariance matrix for assets
 
-    Returns:
+    Returns
     -------
     efficient_sigma: function
         see documentation below
@@ -531,16 +531,14 @@ def unconstrained_mean_variance(M, Sigma):
         Return standard deviation / volatility of the efficient portfolio corresponding to
         target return mu
 
-
-        Parameters:
-        -----------
+        Parameters
+        ----------
         mu: float
             target return
 
-        Returns:
-        --------
-
-        ans: float
+        Returns
+        -------
+        out: float
             efficient portfolio volatility
         """
         return np.sqrt(a * mu ** 2 + b * mu + c)
@@ -550,14 +548,14 @@ def unconstrained_mean_variance(M, Sigma):
         Return asset allocations/weights for the
         portfolio corresponding to target_return
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         target_return: float
             target return for the efficient portfolio
 
-        Returns:
-        --------
-        ans: numpy.ndarray
+        Returns
+        -------
+        out: numpy.ndarray
             efficient portfolio allocations for each asset
         """
         return g * target_return + h
@@ -575,35 +573,33 @@ def _create_portfolio_grid(
     minMu=None,
     maxMu=None,
 ):
-    """
-    Creates possible portfolios that can be invested in as part of a strategy
+    """Creates possible portfolios that can be invested in as part of a strategy
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
 
-    numPortGrid:
+    numPortGrid: int
         Number of total portfolios to generate in the frontier
-    meanVec:
+    meanVec: array_like
         Vector of expected returns
-    sigMat:
+    sigMat: numpy.ndarray
         Covariance matrix
-    startPort:
+    startPort: int
         First portfolio to use
-    numPort:
+    numPort: int
         Number of portfolios to pick from the frontier
-    minMu:
+    minMu: float
         Minimum expected return for portfolios in frontier
-    maxMu:
+    maxMu: float
         Maximum expected return for portfolios in frontier
 
-    Returns:
-    --------
-    portfolios: numpy.array
+    Returns
+    -------
+    portfolios: numpy.ndarray
         Array of numPortfolios x 2. First column is exp. ret. 2nd column is vol.
-    weights: numpy.array
+    weights: numpy.ndarray
         Array of numPortfolios x numAssets. Allocations for each asset on each portfolio.
     """
-
     if not minMu:
         minMu = max(min(meanVec), 0) * 252
 
@@ -655,9 +651,8 @@ def dynamic_programming_portfolio(
     Dynamic programming solution for goal based investment based on
     "Dynamic Goals-Based Wealth Management using Reinforcement Learning (Das, s; Varma, S ;2020)"
 
-    Parameters:
-    -----------
-
+    Parameters
+    ----------
     meanVec: numpy.ndarray
         vector of expected returns for each asset
     sigMat: numpy.ndarray
@@ -681,9 +676,8 @@ def dynamic_programming_portfolio(
     shrinkage: Float
         Optional. Shrinkage coefficient for covariance matrix
 
-    Returns:
-    --------
-
+    Returns
+    -------
     weight_function: Function
        see create_wealth_function for details
     V: numpy.ndarray
@@ -750,9 +744,8 @@ def q_learning_portfolio(
     "Dynamic Goals-Based Wealth Management using Reinforcement Learning (Das, s; Varma, S ;2020)"
     to choose a portfolio in the efficient frontier for every time step
 
-    Parameters:
-    -----------
-
+    Parameters
+    ----------
     meanVec: numpy.ndarray
         vector of expected returns for each asset
     sigMat: numpy.ndarray
@@ -784,15 +777,13 @@ def q_learning_portfolio(
     hParams: dict
         hyper-parameters used to train the RL strategy. See Das & Varma for more details
 
-    Returns:
-    --------
-
+    Returns
+    -------
     weight_function: Function
        see create_wealth_function for details
     Q: numpy.array
         Value function trained by the RL algorithm
     """
-
     if hParams is None:
         hParams = {"epsilon": 0.3, "alpha": 0.1, "gamma": 1, "epochs": 100}
 

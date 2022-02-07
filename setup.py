@@ -7,7 +7,7 @@ setup(
     name="PyPortOpt",
     version="0.2.0",
     license="MIT",
-    author="Weichuan Deng, Ronak Shah",
+    author="Weichuan Deng, Ronak Shah, Fabio Robayo",
     author_email="weichuan.deng@stonybrook.edu, ronak.shah@stonybrook.edu",
     url="https://github.com/PawPol/ML_in_QF_AMS520",
     description="A Python library that implements various Portfolio Optimization method",

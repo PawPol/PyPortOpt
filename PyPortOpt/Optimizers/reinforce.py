@@ -41,13 +41,27 @@ def _get_next_state(s_t, s_t1, port_i, portfolios, dt, hist=None, weights=None):
     Based on a given state of the world (s_t) and an action (port_i) this function returns
     the next (random) state of the world
 
-    Inputs:
-    s_t is a scalar for S at t
-    s_t1 is a vector of values for S at t1
-    port_i is an integer for the index of the portfolio to be used
+    Parameters
+    ----------
+    s_t: float
+        value of S at time t
+    s_t1: array_like
+        vector of values for S at t1
+    port_i: int
+        integer for the index of the portfolio to be used
+    portfolios: list
+        total possible portfolios
+    dt: float
+        time step
+    hist: pandas.core.frame.DataFrame or None
+        if None use gbm to generate next state if df sample from it
+    weights: np.ndarray
+        only used if hist is not None. weights of each asset in the portfolio
 
-    Outputs:
-    integer describing the index of the next state in the vector s_t1
+    Returns
+    -------
+    next_state_index: int
+        integer describing the index of the next state in the vector s_t1
 
     """
     if hist is None:
@@ -77,12 +91,39 @@ def _update_policy_node(
     perform the "Q-update" of the Q-matrix
 
 
-    Inputs:
-    i_w is an integer index for S at t
-    t is an integer index the moment in time
+    Parameters
+    ----------
+    i_w: int
+        index for S at time t
+    t: int
+        index for the moment in time
+    Q: numpy.ndarray
+        Q-tensor
+    R: numpy.ndarray
+        R-tensor
+    T: int
+        time horizon
+    dt: float
+        time step
+    W_0: float
+        initial wealth
+    W: array_like
+        possible wealth values
+    portfolios: array_like
+        possible investment portfolios
+    hParams: dict
+        hyper-parameters for the model
+    returns: pandas.core.frame.DataFrame
+        DataFrame of historical daily returns for all assets
+    weights: array_like
+        weights of all assets for all portfolios
 
-    Outputs:
-    integer describing the index of the next state in the vector of space state
+    Returns
+    -------
+    i_w1: int
+        index of the next state in the vector of space state
+    Q: numpy.ndarray
+        Q-tensor
 
     """
 
@@ -130,22 +171,41 @@ def _update_policy_node(
     return i_w1, Q  # gives back next state (index of W and t)
 
 
-def update_policy_path(Q, R, T, dt, W_0, W, num_portfolios, hParams, returns, weights):
-    """
-        Run policy node for all time steps until T
+def update_policy_path(Q, R, T, dt, W_0, W, portfolios, hParams, returns, weights):
+    """Run policy node for all time steps until T
 
-        Parameters:
-        -----------
-        Q: numpy.ndarray
-          Tensor
-        R:
-        T:
+    Parameters
+    ----------
+    Q: numpy.ndarray
+        Q-tensor
+    R: numpy.ndarray
+        R-tensor
+    T: int
+        time horizon
+    dt: float
+        time step
+    W_0: float
+        initial wealth
+    W: array_like
+        possible wealth values
+    portfolios: array_like
+        possible investment portfolios
+    hParams: dict
+        hyper-parameters for the model
+    returns: pandas.core.frame.DataFrame
+        DataFrame of historical daily returns for all assets
+    weights: array_like
+        weights of all assets for all portfolios
 
+    Returns
+    -------
+    Q: numpy.ndarray
+        Q-tensor
     """
     i_w = 0
     for t in range(T + 1):
         i_w, Q = _update_policy_node(
-            i_w, t, Q, R, T, dt, W_0, W, num_portfolios, hParams, returns, weights
+            i_w, t, Q, R, T, dt, W_0, W, portfolios, hParams, returns, weights
         )
 
     return Q

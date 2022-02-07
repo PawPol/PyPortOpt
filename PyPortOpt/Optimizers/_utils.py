@@ -29,16 +29,23 @@ def _check_missing(df_logret):
 
 
 def _transition_probabilities(s_t, s_t1, dt, dist):
-    """
-    This function calculates P(s_t1 | st) according the mean (mu) and volatility (sigma) of a normal distribution.
+    """Calculates conditional probability current price and a normal distribution
 
-    Inputs:
-    s_t is a scalar
-    s_t1 is a vector
-    dist is an array of [mean, volatility]
+    Calculates P(s_t1 | st) according the mean (mu) and volatility (sigma) of a normal distribution.
 
-    Outputs:
-    array that describes the pmf of P(s_t1 | st)
+    Parameters
+    -----------
+    s_t: float
+        Price at time t
+    s_t1: array_like
+        Possible prices a t+1
+    dist: array_like
+        mean and volatility of the normal distribution
+
+   Returns
+   --------
+    out: array_like
+        pmf of s_t1 given st
     """
     mu = dist[0]
     sigma = dist[1]
@@ -49,47 +56,51 @@ def _transition_probabilities(s_t, s_t1, dt, dist):
 
 
 def _expected_value(s_t, s_t1, v_t1, dt, dist):
-    """
-        This functions calculates the expected value of v_t1 based on P(s_t1 | st)
+    """Calculates the expected value of v_t1 based on P(s_t1 | st)
 
-        Inputs:
-        s_t is a scalar for S at t
-        s_t1 is a vector of values for S at t1
-        v_t1 is a vector of values for V at t1
-        dist is an array of [mean, volatility] describing a normal distribution
+    Parameters
+    -----------
+    s_t: float
+        Price at time t
+    s_t1: array_like
+        Possible prices a t+1
+    v_t1: array_like
+        Possible values of the random variable
+    dist: array_like
+        mean and volatility of the normal distribution
 
 
-        Outputs:
-        scalar with  E_{P(s_t1 | st)}[v_t1]
+   Returns
+   --------
+    out: float
+        Expected value of v_t1 at time t given st
     """
     return _transition_probabilities(s_t, s_t1, dt, dist).dot(v_t1)
 
 
 def _create_wealth_grid(initialWealth, cashInjection, invHorizon, gridGranularity, dt, portfolios):
-    """
-    Creates wealth grid equally-spaced in log-space
+    """Creates wealth grid equally-spaced in log-space
 
-    Parameters:
-    -----------
-    initialWealth: Float
+    Parameters
+    ----------
+    initialWealth: float
         Starting wealth
-    cashInjection: Float
+    cashInjection: float
         Periodic cash injection
-    invHorizon: Integer
+    invHorizon: int
         Investment horizon in number of years
-    gridGranularity: Integer
+    gridGranularity: int
         Number of wealth values to generate per each year. See Das & Varma for more details
-    dt: Float
+    dt: float
         Time step as year fraction
-    portfolios: numpy.array
+    portfolios: numpy.ndarray
         Array of portfolios. Each portfolio represented by mean return and volatility
 
-    Returns:
-    --------
-    W: numpy.array
+    Returns
+    -------
+    W: numpy.ndarray
         Wealth grid
     """
-
     gridPoints = invHorizon * gridGranularity + 1
 
     lnW = np.log(initialWealth)
@@ -122,36 +133,36 @@ def _create_weight_function(wealthGrid, strategy, portfolios):
     Takes possible levels of wealth, possible portfolios, and a Q-tensor and turns them
     into a function
 
-    Parameters:
+    Parameters
     ----------
-    wealthGrid: numpy.array
+    wealthGrid: numpy.ndarray
         Array with possible levels of wealth
-    strategy: numpy.array
+    strategy: numpy.ndarray
         Tensor that describes the value function of a RL problem. See q_learning_portfolio function
         for more details
     portfolios:
         Array of possible portfolios
 
-    Returns:
-    --------
-    weight_function: Function
+    Returns
+    -------
+    weight_function: function
         See local weight_function documentation
 
     """
 
     def weight_function(currentWealth, t):
         """
-        Parameters:
+        Parameters
         ----------
-        currentWealth: Float
+        currentWealth: float
             Current level of wealth
-        t: Integer
+        t: int
             Index of number of time steps representing moment in time
 
-        Returns:
-        --------
-        weight_function: Function
-
+        Returns
+        -------
+        out: list
+            list that represents portfolio, mean return and volatility
         """
         portIndex = np.abs(wealthGrid - currentWealth).argmin()
         if isinstance(portIndex, np.ndarray):

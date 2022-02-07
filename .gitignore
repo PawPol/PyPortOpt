@@ -2,8 +2,4 @@ __pycache__/
 env/
 *.code-workspace
 PyPortOpt.egg-info/
-.idea/inspectionProfiles/profiles_settings.xml
-.idea/misc.xml
-.idea/modules.xml
-.idea/PyPortOpt.iml
-.idea/vcs.xml
+.idea/*
