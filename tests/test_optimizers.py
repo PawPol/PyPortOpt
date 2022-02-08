@@ -312,7 +312,7 @@ class TestOptimizer(unittest.TestCase):
             exp_returns=meanVec*d, sigma=sigMat*d,
             returns=logret.iloc[:d].sum(axis=0).values
         )
-        self.assertEqual(w_opt[1], 0.11102623, 6)
+        self.assertAlmostEqual(w_opt[0], 0.11102623, 6)
 
 
     def test_rollingWindow(self):
