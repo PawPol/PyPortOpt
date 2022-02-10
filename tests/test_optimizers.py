@@ -252,9 +252,9 @@ class TestOptimizer(unittest.TestCase):
     def test_dynamic_programming_portfolio(self):
         homedir = Path(__name__)
         try:
-            data_df = pd.read_parquet("/home/runner/work/PyPortOpt/PyPortOpt/tests/index_data.parquet")
+            data_df = pd.read_parquet("./tests/index_data.parquet")
         except FileNotFoundError:
-            data_df = pd.read_parquet(str(homedir.parent / "index_data.parquet"))
+            pass
         meanVec, sigMat, df_logret = o.preprocessData(data_df.dropna(how='all').iloc[:504, :20])
         meanVec = np.expand_dims(meanVec/100, axis=1)
         dpStrat, dpV = o.dynamic_programming_portfolio(
@@ -266,15 +266,15 @@ class TestOptimizer(unittest.TestCase):
                 wealthGoal=200,
         )
 
-        self.assertAlmostEqual(dpV[0, 0], 0.9998753854829607, 6)
+        self.assertAlmostEqual(dpV[0, 0], 0.9998760795029339, 6)
 
 
     def test_q_learning(self):
         homedir = Path(__name__)
         try:
-            data_df = pd.read_parquet("/home/runner/work/PyPortOpt/PyPortOpt/tests/index_data.parquet")
+            data_df = pd.read_parquet("./tests/index_data.parquet")
         except FileNotFoundError:
-            data_df = pd.read_parquet(str(homedir.parent / "index_data.parquet"))
+            pass
         meanVec, sigMat, df_logret = o.preprocessData(data_df.dropna(how='all').iloc[:501, :10])
         meanVec = np.expand_dims(meanVec/100, axis=1)
         hparams = dict(epsilon=0.3, alpha=0.1, gamma=0.9, epochs=10000)
