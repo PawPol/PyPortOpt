@@ -252,7 +252,7 @@ class TestOptimizer(unittest.TestCase):
     def test_dynamic_programming_portfolio(self):
         homedir = Path(__name__)
         try:
-            data_df = pd.read_parquet("/home/runner/work/PyPortOpt/PyPortOpt/tests/index_data.parquet")
+            data_df = pd.read_parquet("./tests/index_data.parquet")
         except FileNotFoundError:
             data_df = pd.read_parquet(str(homedir.parent / "index_data.parquet"))
         meanVec, sigMat, df_logret = o.preprocessData(data_df.dropna(how='all').iloc[:504, :20])
