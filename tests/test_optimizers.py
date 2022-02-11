@@ -283,7 +283,7 @@ class TestOptimizer(unittest.TestCase):
         )
 
         logger.debug(dpV[0, 0])
-        self.assertAlmostEqual(dpV[0, 0], 0.9998140711804528, 5)
+        self.assertAlmostEqual(dpV[0, 0], 0.694515191511611, 5)
 
 
     def test_q_learning(self):
@@ -307,7 +307,7 @@ class TestOptimizer(unittest.TestCase):
                 hParams=hparams
         )
         logger.debug(dpV[0, 0].mean())
-        self.assertAlmostEqual(dpV[0, 0].mean(), 0.33328700206297307, 1)
+        self.assertAlmostEqual(dpV[0, 0].mean(), 0.13993675763327576, 1)
 
 
     def test_rollingWindow(self):
