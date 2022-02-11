@@ -2,3 +2,4 @@ __pycache__/
 env/
 *.code-workspace
 PyPortOpt.egg-info/
+.idea/*
