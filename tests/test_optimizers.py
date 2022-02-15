@@ -5,13 +5,25 @@ import pandas as pd
 import logging
 from pathlib import Path
 
+##################
+#  LOGGING SETUP #
+##################
+debug = False
+
+if debug:
+    logMode = logging.DEBUG
+else:
+    logMode = logging.INFO
+
 # create logger
 logger = logging.getLogger("tests")
-logger.setLevel(logging.INFO)
+# set log level for all handlers to debug
+logger.setLevel(logMode)
+
 # create console handler and set level to debug
 # best for development or debugging
 consoleHandler = logging.StreamHandler()
-consoleHandler.setLevel(logging.INFO)
+consoleHandler.setLevel(logMode)
 
 # create formatter
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -21,6 +33,9 @@ consoleHandler.setFormatter(formatter)
 
 # add ch to logger
 logger.addHandler(consoleHandler)
+######################
+#  END LOGGING SETUP #
+######################
 
 
 class TestOptimizer(unittest.TestCase):
@@ -179,8 +194,8 @@ class TestOptimizer(unittest.TestCase):
 
         w_opt, var_opt = o.minimumVariancePortfolio(sigMat, longShort=1)
         logger.debug(w_opt)
-        w_opt_act = np.array([0.7648703039434211, 0.23496003918260325])
-        var_opt_act = 0.7935675013205794
+        w_opt_act = np.array([0.76501967, 0.23498033])
+        var_opt_act = 0.7938368339598902
 
         self.assertTrue(np.allclose(w_opt, w_opt_act, atol=1e-8))
 
@@ -239,11 +254,11 @@ class TestOptimizer(unittest.TestCase):
         }
         meanVec, sigMat, df_logret = o.preprocessData(data)
         w_opt, var_opt = o.meanVariancePortfolioReturnsTarget(
-            meanVec, sigMat, retTarget=30, longShort=1
+            meanVec, sigMat, retTarget=0.3, longShort=1
         )
 
-        w_opt_act = np.array([0.7648978785605853, 0.23498106788850331])
-        var_opt_act = 0.7936446615331433
+        w_opt_act = np.array([0.76501967, 0.23498033])
+        var_opt_act = 0.793836833918808
 
         self.assertTrue(np.allclose(w_opt, w_opt_act, atol=1e-8))
 
@@ -264,9 +279,11 @@ class TestOptimizer(unittest.TestCase):
                 timeStep=1,
                 numPortfolios=15,
                 wealthGoal=200,
+                cashInjection=10,
         )
 
-        self.assertAlmostEqual(dpV[0, 0], 0.9998753854829607, 6)
+        logger.debug(dpV[0, 0])
+        self.assertAlmostEqual(dpV[0, 0], 0.694515191511611, 5)
 
 
     def test_q_learning(self):
@@ -286,10 +303,11 @@ class TestOptimizer(unittest.TestCase):
                 timeStep=1,
                 numPortfolios=15,
                 wealthGoal=200,
+                cashInjection=10,
                 hParams=hparams
         )
         logger.debug(dpV[0, 0].mean())
-        self.assertAlmostEqual(dpV[0, 0].mean(), 0.33784939, 1)
+        self.assertAlmostEqual(dpV[0, 0].mean(), 0.13993675763327576, 1)
 
     def test_g_learning(self):
         homedir = Path(__name__)
@@ -371,7 +389,9 @@ class TestOptimizer(unittest.TestCase):
             "minimumVariancePortfolio", data, 2, 1
         )
 
-        R_act = [1.01704871, 1.03264556, 0.99964792, 0.99781672]
+        logger.debug(R)
+
+        R_act = [1.70487069, 3.26455613, -0.03520845, -0.21832846]
 
         logRet_act = [
             [-0.97695581, 2.9202666 ],
