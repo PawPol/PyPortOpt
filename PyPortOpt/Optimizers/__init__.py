@@ -9,4 +9,7 @@ from .optimizers import (
     SymPDcovmatrix,
     sigMatShrinkage,
     Dmat,
+    G_learning_portfolio_opt,
+    g_learn,
+    g_learn_rolling
 )
