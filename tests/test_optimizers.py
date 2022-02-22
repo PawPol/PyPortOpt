@@ -267,7 +267,7 @@ class TestOptimizer(unittest.TestCase):
     def test_dynamic_programming_portfolio(self):
         homedir = Path(__name__)
         try:
-            data_df = pd.read_parquet("/home/runner/work/PyPortOpt/PyPortOpt/tests/index_data.parquet")
+            data_df = pd.read_parquet("./tests/index_data.parquet")
         except FileNotFoundError:
             data_df = pd.read_parquet(str(homedir.parent / "index_data.parquet"))
         meanVec, sigMat, df_logret = o.preprocessData(data_df.dropna(how='all').iloc[:504, :20])
@@ -289,7 +289,7 @@ class TestOptimizer(unittest.TestCase):
     def test_q_learning(self):
         homedir = Path(__name__)
         try:
-            data_df = pd.read_parquet("/home/runner/work/PyPortOpt/PyPortOpt/tests/index_data.parquet")
+            data_df = pd.read_parquet("./tests/index_data.parquet")
         except FileNotFoundError:
             data_df = pd.read_parquet(str(homedir.parent / "index_data.parquet"))
         meanVec, sigMat, df_logret = o.preprocessData(data_df.dropna(how='all').iloc[:501, :10])
@@ -308,6 +308,29 @@ class TestOptimizer(unittest.TestCase):
         )
         logger.debug(dpV[0, 0].mean())
         self.assertAlmostEqual(dpV[0, 0].mean(), 0.13993675763327576, 1)
+
+    def test_g_learning(self):
+        homedir = Path(__name__)
+        try:
+            data_df = pd.read_parquet("./tests/index_data.parquet")
+        except FileNotFoundError:
+            data_df = pd.read_parquet(str(homedir.parent / "index_data.parquet"))
+        meanVec, sigMat, logret = o.preprocessData(data_df.iloc[:15, :10].dropna('columns', how='any'))
+        # meanVec = np.expand_dims(meanVec/100, axis=1)
+        meanVec, sigMat, logret = meanVec/100, sigMat/10000, logret/100
+
+        d = 1
+        g_learner = o.g_learn(
+            num_steps=20, num_risky_assets=logret.shape[1],
+            x_vals_init=1000*np.ones(logret.shape[1]) / logret.shape[1]
+        )
+        np.random.seed(2022)
+        w_opt, g_learner = o.g_learn_rolling(
+            t=0, g_learner=g_learner,
+            exp_returns=meanVec*d, sigma=sigMat*d,
+            returns=logret.iloc[:d].sum(axis=0).values
+        )
+        self.assertAlmostEqual(w_opt[0], 0.11102623, 6)
 
 
     def test_rollingWindow(self):
