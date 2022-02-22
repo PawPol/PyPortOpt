@@ -882,6 +882,7 @@ def rollingwindow_backtest(
     numPortOpt=15,
     gridGranularity=10,
     useEmpDist=False,
+    hParams = None
 ):
     """
     function do the rolling window back test
@@ -973,7 +974,7 @@ def rollingwindow_backtest(
         logger.info(f"Rebalance number {rebalCount} on day {i}")
         k = 0
         w_opt = np.zeros(df1.shape[1])
-        # import pdb; pdb.set_trace()
+        
         window = df_logret[i - window_size : i].copy().dropna(axis=1)
         sample_stocks = window.columns
         logret_window = window.values
@@ -1041,6 +1042,7 @@ def rollingwindow_backtest(
                     shrinkage=lambda_l2,
                     Q=Q,
                     returns=returns,
+                    hParams=hParams
                 )
                 logger.info(f"Probability of success {Q[:, 0, :].max()*100:.2f}%")
             sample_stocks = strat_sample_stocks
