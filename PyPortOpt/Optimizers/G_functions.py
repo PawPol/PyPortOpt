@@ -14,11 +14,22 @@ class G_learning_portfolio_opt:
                  benchmark_portf,
                  gamma,
                  num_risky_assets,
-                 exp_returns,  # array of shape num_steps x num_stocks
-                 Sigma_r,     # covariance matrix of returns of risky assets
+                 exp_returns,
+                 Sigma_r,
                  init_x_vals,  # array of initial asset position values (num_risky_assets + 1)
-                 use_for_WM = True):  # use for wealth management tasks
-
+                 use_for_WM = True):
+        """
+        Input several parameters into the model
+        :param num_steps: number of steps in RL model
+        :param beta: the parameter to determine the strength of entropy regularization
+        :param benchmark_portf: the value of portfolio-independent benchmark
+        :param gamma: discount factor in accumulative reward function
+        :param num_risky_assets: number of risky assets in portfolio
+        :param exp_returns: expected returns of risky assets at each step (shape: num_steps x num_risky_assets)
+        :param Sigma_r: covariance matrix of risky assets returns
+        :param init_x_vals: initial cash invested in portfolio
+        :param use_for_WM: use for wealth management tasks (True or False)
+        """
         self.num_steps = num_steps
         self.num_assets = num_risky_assets
 
@@ -108,6 +119,9 @@ class G_learning_portfolio_opt:
         self.expected_portf_val[0] = self.x_vals[0,:].sum()
 
     def reset_prior_policy(self):
+        """
+        reset the RL model prior policy parameters into 0
+        """
         # initialize time-dependent parameters of prior policy
         self.u_bar_prior = torch.zeros(self.num_steps, self.num_assets, requires_grad=False,
                                        dtype=torch.float64)
@@ -126,7 +140,14 @@ class G_learning_portfolio_opt:
 
     def reward_fun(self, t, x_vals, u_vals, exp_rets, lambd, Sigma_hat):
         """
-        The reward function
+        Compute reward by reward function
+        :param t: the t-th time step of RL model
+        :param x_vals: cash in assets
+        :param u_vals: cash change in assets
+        :param exp_rets: expected returns of assets
+        :param lambd: the parameter to determine the penalty strength of not reaching target portfolio value
+        :param Sigma_hat: Sigma_r (covariance matrix) + (1+expected returns)(1+expected returns)^transpose
+        :return: Computed reward (aux_1 + aux_2 + aux_3 + aux_4 + aux_5)
         """
         x_plus = x_vals + u_vals
 
@@ -142,7 +163,7 @@ class G_learning_portfolio_opt:
 
     def compute_reward_fun(self):
         """
-        Compute coefficients R_xx, R_ux, etc. for all steps
+        Compute terms including R_xx, R_ux, etc. for all steps in reward function
         """
         for t in range(0, self.num_steps):
 
@@ -175,10 +196,9 @@ class G_learning_portfolio_opt:
     def project_cash_injections(self):
         """
         Compute the expected values of future asset positions, and the expected cash injection for future steps,
-        as well as realized values of the target portfolio
+        as well as realized values of the target portfolio in terms of trained policy.
         """
-
-        # this assumes that the policy is trained
+        # this assumes that the policy has been trained
         for t in range(1, self.num_steps):  # the initial value is fixed
             # increment the previous x_t
             delta_x_t = self.u_bar_prior[t,:] + self.v_bar_prior[t,:,:].mv(self.x_vals[t-1,:])
@@ -195,7 +215,8 @@ class G_learning_portfolio_opt:
 
     def set_terminal_conditions(self):
         """
-        set the terminal condition for the F-function
+        Set the terminal condition for the F-function (Free energy function). That is to say, compute F-function at
+        terminal step in RL model.
         """
 
         # the auxiliary quantity to perform matrix calculations
@@ -269,8 +290,11 @@ class G_learning_portfolio_opt:
 
     def G_learning(self, err_tol, max_iter):
         """
-        find the optimal policy for the time dependent policy
-
+        Find the optimal policy for the time dependent policy. This will run backward from the terminal step to
+        initial step by calling step_G_learning function at each step.
+        This should start from step t = num_steps - 2 (i.e. from a step that is before the last one).
+        :param err_tol: the parameter error tolerance to input into step_G_learning function
+        :param max_iter: the parameter maximum iteration to input into step_G_learning function
         """
         print('Doing G-learning, it may take a few seconds...')
 
@@ -286,8 +310,11 @@ class G_learning_portfolio_opt:
 
     def step_G_learning(self, t, err_tol, max_iter):
         """
-        Perform one step of backward iteration for G-learning self-consistent equations
-        This should start from step t = num_steps - 2 (i.e. from a step that is before the last one)
+        Perform one step of backward iteration for G-learning self-consistent equations.
+        :param t: the t-th step of model that the function is running
+        :param err_tol: error tolerance - once the updated u_bar and v_bar move less than error tolerance.
+                        The function will stop iteration.
+        :param max_iter: maximum iteration
         """
 
         # make matrix Sigma_hat_t
@@ -329,7 +356,10 @@ class G_learning_portfolio_opt:
 
     def update_Q_params(self, t, A_t, Sigma_hat_t):
         """
-        update the current (time-t) parameters of Q-function from (t+1)-parameters of F-function
+        Update the current (time-t) parameters of Q-function from (t+1)-parameters of F-function
+        :param t: the t-th step of model that the function is running
+        :param A_t: diag(1+expected returns of assets)
+        :param Sigma_hat_t: not used
         """
 
         ones = torch.ones(self.num_assets, dtype=torch.float64)
@@ -358,9 +388,9 @@ class G_learning_portfolio_opt:
 
     def update_F_params(self, t):
         """
-        update the current (time-t) parameters of F-function from t-parameters of G-function
+        Update the current (time-t) parameters of F-function from t-parameters of G-function
         This is a policy evaluation step: it uses the current estimations of the mean parameters of the policy
-
+        :param t: the t-th step of model that the function is running
         """
 
         # produce auxiliary parameters U_t, W_t, Sigma_tilde_t
@@ -391,7 +421,8 @@ class G_learning_portfolio_opt:
 
     def update_policy_params(self, t):
         """
-        update parameters of the Gaussian policy using current coefficients of the F- and G-functions
+        Update parameters of the Gaussian policy using current parameters in the F-functions and G-functions
+        :param t: the t-th step of model that the function is running
         """
 
         new_Sigma_prior_inv = self.Sigma_prior_inv[t,:,:].clone() - 2 * self.beta.clone() * self.Q_uu[t,:,:].clone()
@@ -418,7 +449,8 @@ class G_learning_portfolio_opt:
 
     def trajs_to_torch_tensors(self, trajs):
         """
-        Convert data from a list of lists into Torch tensors
+        Convert trajectories data from a list of lists into Torch tensors
+        :param trajs: trajectories
         """
         num_trajs = len(trajs)
 
@@ -434,7 +466,11 @@ class G_learning_portfolio_opt:
                                t,
                                x_t, u_t):
         """
-        Given time t and corresponding values of vectors x_t, u_t, compute the total reward for this step
+        Given time t and corresponding values of vectors x_t, u_t, compute the accumulative reward at the t-th step
+        :param t: the t-th step of model that the function is running
+        :param x_t: cash in assets at the t-th step
+        :param u_t: cash change in assets at the t-th step
+        :return: Computed reward (aux_xx + aux_ux + aux_uu + aux_x + aux_u + aux_0)
         """
 
         aux_xx = x_t.dot(self.R_xx[t,:,:].clone().mv(x_t))
@@ -450,7 +486,11 @@ class G_learning_portfolio_opt:
                               t,
                               x_t, u_t):
         """
-        Given time t and corresponding values of vectors x_t, u_t, compute the total reward for this step
+        Given time t and corresponding values of vectors x_t, u_t, compute the accumulative reward as of the t-th step
+        :param t: the t-th step of model that the function is running
+        :param x_t: cash in assets at the t-th step
+        :param u_t: cash change in assets at the t-th step
+        :return: Computed accumulative reward (aux_xx + aux_ux + aux_uu + aux_x + aux_u + aux_0)
         """
 
         aux_xx = x_t.dot(self.Q_xx[t,:,:].clone().mv(x_t))
@@ -466,7 +506,10 @@ class G_learning_portfolio_opt:
                               t,
                               x_t):
         """
-        Given time t and corresponding values of vectors x_t, u_t, compute the total reward for this step
+        Given time t and corresponding values of vectors x_t, u_t, compute the total reward at the t-th step
+        :param t: the t-th step of model that the function is running
+        :param x_t: cash in assets at the t-th step
+        :return: Computed F function value at the t-th step (aux_xx + aux_x + aux_0)
         """
 
         aux_xx = x_t.dot(self.F_xx[t,:,:].clone().mv(x_t))
@@ -481,11 +524,12 @@ class G_learning_portfolio_opt:
                   err_tol, max_iter):
 
         """
-        Estimate parameters of the reward function using MaxEnt IRL.
-        Inputs:
-
-        trajs - a list of trajectories. Each trajectory is a list of state-action pairs, stored as a tuple.
-                We assume each trajectory has the same length
+        Estimate parameters of the reward function using MaxEnt IRL, given the input trajectory.
+        :param trajs: a list of trajectories. Each trajectory is a list of state-action pairs, stored as a tuple.
+                    We assume each trajectory has the same length
+        :param learning_rate: learning rate
+        :param err_tol: error tolerance
+        :param max_iter: maximum iteration
         """
 
         # omega is a tunable parameter that determines the cost matrix self.Omega_mat
@@ -571,7 +615,10 @@ class G_learning_portfolio_opt:
 class g_learn:
     def __init__(self, num_steps, num_risky_assets, x_vals_init):
         """
-        A g-learning rolling class
+        A g-learning rolling class.
+        This class will be rolling on series of time steps from G_learning_portfolio_opt class.
+        After it calling G_learning_portfolio_opt class, it will update parameters into G_learning_portfolio_opt class
+        and get to the next series of time steps.
         :param num_steps: g-learning model number of steps (months here)
         :param num_risky_assets: number of assets
         :param x_vals_init: initial cash assigned to each asset at step 1
@@ -610,7 +657,7 @@ class g_learn:
 
     def param_update(self, t, exp_returns, sigma):
         """
-        update class expected return matrix after and including the t+1th step,
+        Update class expected return matrix after and including the t+1th step,
         and update assets return covariance matrix
         :param t: the step number (t+1) to be updated
         :param exp_returns: expected return at the t+1 step
@@ -621,7 +668,7 @@ class g_learn:
 
     def run(self, t, exp_returns, sigma):
         """
-        execute g-learning by calling g-learning class with input expected return matrix and covariance matrix updated
+        Execute g-learning by calling g-learning class with input expected return matrix and covariance matrix updated
         at the t+1th step, then record the action (cash injection) at the t+1th step and output assets weight
         :param t: the step number (t+1)
         :param exp_returns: expected return at the t+1th step
