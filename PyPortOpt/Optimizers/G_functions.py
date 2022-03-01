@@ -33,17 +33,27 @@ class G_learning_portfolio_opt:
         init_x_vals : initial cash invested in portfolio
         use_for_WM : use for wealth management tasks (True or False)
         """
+        # self.num_steps: number of steps in RL model
         self.num_steps = num_steps
+        # self.num_assets:
+        # number of assets in portfolio, if there is an additional risk free asset, then num_risky_assets + 1
         self.num_assets = num_risky_assets
 
+        # self.lambd: the parameter to determine the penalty strength of not reaching target portfolio value
         self.lambd = torch.tensor(params[0], requires_grad=False, dtype=torch.float64)
+        # self.Omega_mat:
+        # The parameter matrix in a convex function as the term approximating transaction costs in reward function
         self.Omega_mat = params[1] * torch.eye(self.num_assets, dtype=torch.float64)
+        # self.eta: (>1) the parameter that defines the desired growth rate of the current portfolio
         self.eta = torch.tensor(params[2], requires_grad=False, dtype=torch.float64)
+        # self.rho: a relative weight of the portfolio-independent and portfolio-dependent terms
         self.rho = torch.tensor(params[3], requires_grad=False, dtype=torch.float64)
+        # self.beta: the "inverse-temperature" parameter determines the strength of entropy regularization
         self.beta = torch.tensor(beta, requires_grad=False, dtype=torch.float64)
-
+        # self.gamma: discount factor in accumulative reward function
         self.gamma = gamma
-        self.use_for_WM = use_for_WM
+
+        self.use_for_WM = use_for_WM  # use for wealth management tasks or not
 
         self.num_risky_assets = num_risky_assets
 
@@ -51,6 +61,8 @@ class G_learning_portfolio_opt:
         assert Sigma_r.shape[0] == Sigma_r.shape[1]
         assert Sigma_r.shape[0] == num_risky_assets  # self.num_assets
 
+        # If there is an additional risk free asset,
+        # then self.Sigma_r_np is [0,zeros(1,len(Sigma_r)); zeros(len(Sigma_r),1), 0]
         self.Sigma_r_np = Sigma_r  # array of shape num_stocks x num_stocks
 
         self.reg_mat = 1e-3*torch.eye(self.num_assets, dtype=torch.float64)
@@ -67,6 +79,7 @@ class G_learning_portfolio_opt:
         self.Sigma_r = torch.tensor(Sigma_r, requires_grad=False, dtype=torch.float64)
         self.Sigma_r_tilde = torch.tensor(self.Sigma_r_tilde_np, requires_grad=False, dtype=torch.float64)
 
+        # self.benchmark_portf: the value of portfolio-independent benchmark
         self.benchmark_portf = torch.tensor(benchmark_portf, requires_grad=False, dtype=torch.float64)
 
         # asset holding values for all times. Initialize with initial values,
@@ -674,23 +687,28 @@ class g_learn:
         eta = 1.5  # 1.3 # 1.5 # 1.2
         rho = 0.4
 
-        self.reward_params = [lambd, omega, eta, rho]
+        self.reward_params = [lambd, omega, eta, rho]  # Parameters in reward function
         self.beta = beta
         self.gamma = gamma
-        dt = 1/12
+        # Time step unit (day/week/month/year)
+        dt = 1/12  # month
         self.x_vals_init = x_vals_init
         self.x_t = self.x_vals_init[:]
+        # It will be arrays of cash value for each asset right after action
         self.x_next = 0
+        # It will be arrays of cash value change (action) for each asset
         self.u_t = 0
-        # target portfolio
+        # benchmark portfolio growth rate
         target_return = 0.8
         self.benchmark_portf = [x_vals_init.sum() * np.exp(dt * target_return)]
         for i in range(1, self.num_steps):
             self.benchmark_portf.append(self.benchmark_portf[i-1]*np.exp(dt * target_return))
 
-        self.trajs = [[]]*self.num_steps
-        self.trajs_all = []
+        # Record trajectories
+        self.trajs = [[]]*self.num_steps  # Trajectory of one unit of model time steps
+        self.trajs_all = []  # Trajectory of all time steps (time steps = several times of model time steps)
 
+        # It will be g-learning class, however, after model time steps we need to define a new g-learning class
         self.learner = []
 
     def param_update(self, t, exp_returns, sigma):
@@ -771,7 +789,7 @@ class g_learn:
     def update_before_step_1(self, t):
         """
         At the step 1, we need to update the initial cash assigned to each asset
-        and redefine target portfolio based on initial assets cash
+        and redefine benchmark portfolio based on the new initial assets cash
         Parameters
         ----------
         t : the step number (t+1)
