@@ -23,7 +23,7 @@ import sys
 
 sys.path.insert(0, os.path.abspath('../../..'))
 
-project = 'PortOpt'
+project = 'PyPortOpt'
 copyright = '2021, ..'
 author = '..'
 
