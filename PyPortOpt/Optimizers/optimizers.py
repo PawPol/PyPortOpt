@@ -1057,11 +1057,12 @@ def rollingwindow_backtest(
                     num_steps=12, num_risky_assets=logret.shape[1],
                     x_vals_init=1000*np.ones(logret.shape[1]) / logret.shape[1]
                 )
-            w_sample, g_learner = g_learn_rolling(
-                t=int((i-start)/d % g_learner.num_steps), g_learner=g_learner,
-                exp_returns=meanVec*d, sigma=sigMat*d,
-                returns=df_logret.iloc[i-d:i].sum(axis=0).values / 100
-            )
+            if i+d <= n:
+                w_sample, g_learner = g_learn_rolling(
+                    t=int((i-start)/d % g_learner.num_steps), g_learner=g_learner,
+                    exp_returns=meanVec*d, sigma=sigMat*d,
+                    returns=logret.iloc[i:i+d].sum(axis=0).values
+                )
 
         else:
             raise ValueError(f"Optimization type {optimizerName} not defined")

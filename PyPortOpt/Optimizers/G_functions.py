@@ -819,7 +819,8 @@ def g_learn_rolling(t, g_learner, exp_returns, sigma, returns):
     -------
     optimal weight at the t+1th step, and the updated g_learning rolling class
     """
-    g_learner.update_before_step_1(t)
+    if t == 0:
+        g_learner.update_before_step_1(t)
 
     weight = g_learner.run(t, exp_returns, sigma)
     g_learner.update(t, returns)
