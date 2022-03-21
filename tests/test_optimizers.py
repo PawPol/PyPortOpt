@@ -322,7 +322,9 @@ class TestOptimizer(unittest.TestCase):
         d = 1
         g_learner = o.g_learn(
             num_steps=20, num_risky_assets=logret.shape[1],
-            x_vals_init=1000*np.ones(logret.shape[1]) / logret.shape[1]
+            x_vals_init=1000*np.ones(logret.shape[1]) / logret.shape[1],
+            lambd=0.001, omega=1.0, eta=1.5, rho=0.4,
+            beta=1000.0, gamma=0.95, target_return=0.8
         )
         np.random.seed(2022)
         w_opt, g_learner = o.g_learn_rolling(

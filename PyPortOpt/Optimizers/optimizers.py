@@ -884,7 +884,15 @@ def rollingwindow_backtest(
     numPortOpt=15,
     gridGranularity=10,
     useEmpDist=False,
-    hParams = None
+    hParams = None,
+    g_steps=12,
+    g_goal_rate=0.8,
+    g_lambda=0.001,
+    g_omega=1.0,
+    g_eta=1.5,
+    g_rho=0.4,
+    g_beta=1000.0,
+    g_gamma=0.95
 ):
     """
     function do the rolling window back test
@@ -915,24 +923,39 @@ def rollingwindow_backtest(
         Takes a value greater than 0. Specifies L1 penalty
     lambda_l2 : Float
         Takes a value greater than 0. Specifies L2 penalty
-    initialWealth: Float
+    initialWealth : Float
         Starting wealth for the dynamic programming case
-    wealthGoal: Float
+    wealthGoal : Float
         Final target wealth
-    cashInjection: Float
+    cashInjection : Float
         Periodic cash injections for the investment goal. Period corresponds to rebalance time.
-    invHorizon: int
+    invHorizon : int
         Number of year until target
-    stratUpdateFreq: int
+    stratUpdateFreq : int
         Number of rebalance periods before updating strategy
-    numPortOpt: int
+    numPortOpt : int
         Number of portfolio options for DP and RL
-    gridGranularity: int
+    gridGranularity : int
         Number of wealth points to have in the wealth grid for every year. See Das & Varma (2020) for details.
-    useEmpDist: bool
+    useEmpDist : bool
         If True the q_learning algorithm samples from historical returns instead
         of generating a return from GBM
-
+    g_steps : int
+        The RL model steps (in month)
+    g_goal_rate : Float
+        Benchmark portfolio growth rate
+    g_lambda : Float
+        The penalty strength of not reaching target portfolio value
+    g_omega : Float
+        The parameter approximating transaction costs
+    g_eta : Float
+        The parameter that defines the desired growth rate of the current portfolio
+    g_rho : Float
+        A relative weight of the portfolio-independent and portfolio-dependent terms
+    g_beta : Float
+        The parameter to determine the strength of entropy regularization
+    g_gamma : Float
+        The discount factor in accumulative reward function
     Returns
     -------
     R : 2d array
@@ -1054,8 +1077,10 @@ def rollingwindow_backtest(
         elif optimizerName == "G-learning":
             if i == start:
                 g_learner = g_learn(
-                    num_steps=12, num_risky_assets=logret.shape[1],
-                    x_vals_init=1000*np.ones(logret.shape[1]) / logret.shape[1]
+                    num_steps=g_steps, num_risky_assets=logret.shape[1],
+                    x_vals_init=initialWealth*np.ones(logret.shape[1]) / logret.shape[1],
+                    lambd=g_lambda, omega=g_omega, eta=g_eta, rho=g_rho,
+                    beta=g_beta, gamma=g_gamma, target_return=g_goal_rate
                 )
             if i+d <= n:
                 w_sample, g_learner = g_learn_rolling(

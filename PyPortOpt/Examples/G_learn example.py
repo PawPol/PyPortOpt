@@ -16,6 +16,7 @@ start = window_size  # Time to start investment
 model_steps = 3  # The RL model steps is 3 (in month). After 3 months, we define a new RL model
 currentWealth = 1000  # Initial cash
 
+# Visible
 for rebalCount, i in enumerate(range(start, start+2*model_steps*d, d)):
     window = logret[i-window_size:i].copy()
     logret_window = window.values
@@ -25,7 +26,9 @@ for rebalCount, i in enumerate(range(start, start+2*model_steps*d, d)):
     if i == start:
         g_learner = o.g_learn(
             num_steps=model_steps, num_risky_assets=logret.shape[1],
-            x_vals_init=currentWealth*np.ones(logret.shape[1]) / logret.shape[1]
+            x_vals_init=currentWealth*np.ones(logret.shape[1]) / logret.shape[1],
+            lambd=0.001, omega=1.0, eta=1.5, rho=0.4,
+            beta=1000.0, gamma=0.95, target_return=0.8
         )
 
     # w_sample, g_learner = o.g_learn_rolling(
