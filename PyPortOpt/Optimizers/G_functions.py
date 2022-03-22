@@ -662,7 +662,9 @@ class G_learning_portfolio_opt:
 
 
 class g_learn:
-    def __init__(self, num_steps, num_risky_assets, x_vals_init):
+    def __init__(self, num_steps, num_risky_assets, x_vals_init,
+                 lambd=0.001, omega=1.0, eta=1.5, rho=0.4,
+                 beta=1000.0, gamma=0.95, target_return=0.8):
         """
         A g-learning rolling class.
         This class will be rolling on series of time steps from G_learning_portfolio_opt class.
@@ -673,19 +675,19 @@ class g_learn:
         num_steps : g-learning model number of steps (months here)
         num_risky_assets : number of assets
         x_vals_init : initial cash assigned to each asset at step 1
+        lambd : the penalty strength of not reaching target portfolio value
+        omega : the parameter approximating transaction costs
+        eta : the parameter that defines the desired growth rate of the current portfolio
+        rho : a relative weight of the portfolio-independent and portfolio-dependent terms
+        beta : the parameter to determine the strength of entropy regularization
+        gamma : the discount factor in accumulative reward function
+        target_return : benchmark portfolio growth rate
         """
         self.num_risky_assets = num_risky_assets
         self.num_steps = num_steps
         self.num_assets = self.num_risky_assets
         self.expected_risky_returns = np.empty((self.num_steps, self.num_risky_assets))
         self.sigma = np.empty((self.num_risky_assets, self.num_risky_assets))
-
-        lambd = 0.001
-        omega = 1.0
-        beta = 1000.0
-        gamma = 0.95
-        eta = 1.5  # 1.3 # 1.5 # 1.2
-        rho = 0.4
 
         self.reward_params = [lambd, omega, eta, rho]  # Parameters in reward function
         self.beta = beta
@@ -699,7 +701,6 @@ class g_learn:
         # It will be arrays of cash value change (action) for each asset
         self.u_t = 0
         # benchmark portfolio growth rate
-        target_return = 0.8
         self.benchmark_portf = [x_vals_init.sum() * np.exp(dt * target_return)]
         for i in range(1, self.num_steps):
             self.benchmark_portf.append(self.benchmark_portf[i-1]*np.exp(dt * target_return))
@@ -819,7 +820,8 @@ def g_learn_rolling(t, g_learner, exp_returns, sigma, returns):
     -------
     optimal weight at the t+1th step, and the updated g_learning rolling class
     """
-    g_learner.update_before_step_1(t)
+    if t == 0:
+        g_learner.update_before_step_1(t)
 
     weight = g_learner.run(t, exp_returns, sigma)
     g_learner.update(t, returns)
