@@ -1087,7 +1087,7 @@ def rollingwindow_backtest(
                 w_sample, g_learner = g_learn_rolling(
                     t=int((i-start)/d % g_learner.num_steps), g_learner=g_learner,
                     exp_returns=meanVec*d, sigma=sigMat*d,
-                    returns=logret.iloc[i:i+d].sum(axis=0).values
+                    returns=logret[i:i+d].sum(axis=0)
                 )
 
         else:
