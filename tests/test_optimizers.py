@@ -317,22 +317,40 @@ class TestOptimizer(unittest.TestCase):
             data_df = pd.read_parquet(str(homedir.parent / "index_data.parquet"))
         meanVec, sigMat, logret = o.preprocessData(data_df.iloc[:15, :10].dropna('columns', how='any'))
         # meanVec = np.expand_dims(meanVec/100, axis=1)
-        meanVec, sigMat, logret = meanVec/100, sigMat/10000, logret/100
+        logret = logret/100
 
-        d = 1
+        n, m = logret.shape
+        d = 4
+        window_size = 3
+        start = window_size
         g_learner = o.g_learn(
-            num_steps=20, num_risky_assets=logret.shape[1],
+            num_steps=20, rebalance_time=d, num_risky_assets=logret.shape[1],
             x_vals_init=1000*np.ones(logret.shape[1]) / logret.shape[1],
             lambd=0.001, omega=1.0, eta=1.5, rho=0.4,
             beta=1000.0, gamma=0.95, target_return=0.8
         )
         np.random.seed(2022)
-        w_opt, g_learner = o.g_learn_rolling(
-            t=0, g_learner=g_learner,
-            exp_returns=meanVec*d, sigma=sigMat*d,
-            returns=logret.iloc[:d].sum(axis=0).values
-        )
-        self.assertAlmostEqual(w_opt[0], 0.11102623, 6)
+        w = np.empty((0,m), float)
+        for i in range(start, n, d):
+            logret_window = logret[i-window_size:i]
+            sigMat = np.cov(logret_window, rowvar=False)
+            meanVec = np.mean(logret_window, axis=0)
+            if i+d <= n:
+                w_opt, g_learner = o.g_learn_rolling(
+                    t=int((i-start)/d % g_learner.num_steps), g_learner=g_learner,
+                    exp_returns=meanVec*d, sigma=sigMat*d,
+                    returns=logret.iloc[i:i+d].sum(axis=0).values
+                )
+            else:
+                d_final = n - i
+                w_opt, g_learner = o.g_learn_rolling(
+                    t=int((i-start)/d % g_learner.num_steps), g_learner=g_learner,
+                    exp_returns=meanVec*d_final, sigma=sigMat*d_final,
+                    returns=logret.iloc[i:i+d].sum(axis=0).values
+                )
+            w = np.r_[w, np.reshape(w_opt, (-1,m))]
+
+        self.assertAlmostEqual(w_opt[0], 0.10768308253628003, 6)
 
 
     def test_rollingWindow(self):
