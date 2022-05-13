@@ -987,6 +987,8 @@ def rollingwindow_backtest(
 
     df_logret = np.log(df1).diff().dropna(how="all")
     logret = df_logret.values
+    ret = df1.values[1:] / df1.values[:-1] - 1
+    ret = ret[~np.isnan(ret).all(axis=1)]
     n = logret.shape[0]
     d = rebalance_time
     start = window_size
@@ -1078,7 +1080,7 @@ def rollingwindow_backtest(
         elif optimizerName == "G-learning":
             if i == start:
                 g_learner = g_learn(
-                    num_steps=g_steps, num_risky_assets=logret.shape[1],
+                    num_steps=g_steps, rebalance_time=d, num_risky_assets=logret.shape[1],
                     x_vals_init=initialWealth*np.ones(logret.shape[1]) / logret.shape[1],
                     lambd=g_lambda, omega=g_omega, eta=g_eta, rho=g_rho,
                     beta=g_beta, gamma=g_gamma, target_return=g_goal_rate
@@ -1087,7 +1089,14 @@ def rollingwindow_backtest(
                 w_sample, g_learner = g_learn_rolling(
                     t=int((i-start)/d % g_learner.num_steps), g_learner=g_learner,
                     exp_returns=meanVec*d, sigma=sigMat*d,
-                    returns=logret.iloc[i:i+d].sum(axis=0).values
+                    returns=np.cumprod(ret[i:i+d]+1, axis=0)-1
+                )
+            else:
+                d_final = n - i
+                w_sample, g_learner = g_learn_rolling(
+                    t=int((i-start)/d % g_learner.num_steps), g_learner=g_learner,
+                    exp_returns=meanVec*d_final, sigma=sigMat*d_final,
+                    returns=np.cumprod(ret[i:i+d_final]+1, axis=0)-1
                 )
 
         else:

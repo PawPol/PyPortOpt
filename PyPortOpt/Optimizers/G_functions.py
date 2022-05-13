@@ -662,7 +662,7 @@ class G_learning_portfolio_opt:
 
 
 class g_learn:
-    def __init__(self, num_steps, num_risky_assets, x_vals_init,
+    def __init__(self, num_steps, rebalance_time, num_risky_assets, x_vals_init,
                  lambd=0.001, omega=1.0, eta=1.5, rho=0.4,
                  beta=1000.0, gamma=0.95, target_return=0.8):
         """
@@ -693,7 +693,7 @@ class g_learn:
         self.beta = beta
         self.gamma = gamma
         # Time step unit (day/week/month/year)
-        dt = 1/12  # month
+        dt = rebalance_time / 252
         self.x_vals_init = x_vals_init
         self.x_t = self.x_vals_init[:]
         # It will be arrays of cash value for each asset right after action
