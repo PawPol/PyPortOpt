@@ -2,7 +2,7 @@ numpy
 pandas
 osqp
 scipy
-torch
+pytorch
 matplotlib
 fastparquet
 quantstats
