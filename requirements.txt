@@ -1,7 +1,7 @@
 numpy==1.21.0
 pandas==1.5.2
 osqp
-scipy==1.7.0
+scipy
 torch==1.10.1
 matplotlib
 fastparquet
