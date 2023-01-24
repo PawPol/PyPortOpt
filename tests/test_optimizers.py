@@ -192,7 +192,7 @@ class TestOptimizer(unittest.TestCase):
         }
         meanVec, sigMat, df_logret = o.preprocessData(data)
 
-        w_opt, var_opt = portfolio_optimization(meanVec,sigMat,retTarget = 0,longShort = 1,maxAlloc=1,lambda_l1=0,lambda_l2=0,riskfree = 0,assetsOrder=None,maxShar = 0,
+        w_opt, var_opt = o.portfolio_optimization(meanVec,sigMat,retTarget = 0,longShort = 1,maxAlloc=1,lambda_l1=0,lambda_l2=0,riskfree = 0,assetsOrder=None,maxShar = 0,
         turnover = None, w_pre = None, individual = False, exposure_constrain = 0, w_bench = None, factor_exposure_constrain = None, U_factor = None, 
         general_linear_constrain = None, U_genlinear = 0, w_general = None, TE_constrain = 0, general_quad = 0, Q_w = None, Q_b = None, Q_bench = None)
         logger.debug(w_opt)
@@ -345,7 +345,7 @@ class TestOptimizer(unittest.TestCase):
             },
         }
 
-        R, logRet, w, rownames = rollingwindow_backtest(
+        R, logRet, w, rownames = o.rollingwindow_backtest(
             "minimumVariancePortfolio", data, 2, 1
         )
 
