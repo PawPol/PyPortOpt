@@ -8,7 +8,6 @@ from .optimizers import (
     penalty_vector,
     sigMat_expend,
     preprocessData,
-    SymPDcovmatrix,
     sigMatShrinkage,
     nearestPD,
     Dmat,
