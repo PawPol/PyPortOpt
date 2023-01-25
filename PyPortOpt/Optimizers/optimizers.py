@@ -126,6 +126,14 @@ def nearestPD(A):
 
     return A3
 
+def isPD(B):
+    """Returns true when input is positive-definite, via Cholesky"""
+    try:
+        _ = la.cholesky(B)
+        return True
+    except LA.LinAlgError:
+        return False
+
 
 def sigMatShrinkage(sigMat, lambda_l2):
     """
