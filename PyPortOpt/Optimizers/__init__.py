@@ -1,6 +1,5 @@
 from .optimizers import (
-    minimumVariancePortfolio,
-    meanVariancePortfolioReturnsTarget,
+    portfolio_optimization,
     dynamic_programming_portfolio,
     q_learning_portfolio,
     rollingwindow_backtest,
