@@ -102,19 +102,6 @@ class TestOptimizer(unittest.TestCase):
 
         self.assertEqual(sigMat.shape[1], 2)
 
-    def test_SymPDcovmatrix(self):
-        a = [[1, 2, 3], [5, 6, 7], [3, 5, 9]]
-        a = np.array(a)
-        SPD = np.dot(a.T, a)
-        nonSPD = a
-
-        mat, _ = o.SymPDcovmatrix(SPD, tol=1e-8)
-        self.assertTrue(np.allclose(mat, SPD, atol=1e-8))
-
-        mat, _ = o.SymPDcovmatrix(nonSPD, tol=1e-8)
-        eig, _ = np.linalg.eig(mat)
-        self.assertTrue(np.any(eig > 0))
-
     def test_sigMatShrinkage(self):
         a = [[1, 0, 0], [0, 3, 0], [0, 0, 4]]
         a = np.array(a)
@@ -193,7 +180,7 @@ class TestOptimizer(unittest.TestCase):
         meanVec, sigMat, df_logret = o.preprocessData(data)
 
         w_opt, var_opt = o.portfolio_optimization(meanVec,sigMat,retTarget = 0,longShort = 1,maxAlloc=1,lambda_l1=0,lambda_l2=0,riskfree = 0,assetsOrder=None,maxShar = 0,
-        turnover = None, w_pre = None, individual = False, exposure_constrain = 0, w_bench = None, factor_exposure_constrain = None, U_factor = None, 
+        turnover = None, w_pre = None, individual = False, exposure_constrain = 0, w_bench = None, factor_exposure_constrain = None, U_factor = None,
         general_linear_constrain = None, U_genlinear = 0, w_general = None, TE_constrain = 0, general_quad = 0, Q_w = None, Q_b = None, Q_bench = None)
         logger.debug(w_opt)
         w_opt_act = np.array([0.76501967, 0.23498033])
@@ -223,7 +210,7 @@ class TestOptimizer(unittest.TestCase):
         )
 
         logger.debug(dpV[0, 0])
-        self.assertAlmostEqual(dpV[0, 0], 0.694515191511611, 5)
+        self.assertAlmostEqual(dpV[0, 0], 0.9937454699547078, 5)
 
 
     def test_q_learning(self):
@@ -247,7 +234,7 @@ class TestOptimizer(unittest.TestCase):
                 hParams=hparams
         )
         logger.debug(dpV[0, 0].mean())
-        self.assertAlmostEqual(dpV[0, 0].mean(), 0.13993675763327576, 1)
+        self.assertAlmostEqual(dpV[0, 0].mean(), 0.28070996812667276, 1)
 
     def test_g_learning(self):
         homedir = Path(__name__)

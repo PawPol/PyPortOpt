@@ -105,7 +105,7 @@ def nearestPD(A):
     if isPD(A):
         return A
     B = (A + A.T) / 2
-    _, s, V = la.svd(B)
+    _, s, V = LA.svd(B)
 
     H = np.dot(V.T, np.dot(np.diag(s), V))
 
@@ -116,11 +116,11 @@ def nearestPD(A):
     if isPD(A3):
         return A3
 
-    spacing = np.spacing(la.norm(A))
+    spacing = np.spacing(LA.norm(A))
     I = np.eye(A.shape[0])
     k = 1
     while not isPD(A3):
-        mineig = np.min(np.real(la.eigvals(A3)))
+        mineig = np.min(np.real(LA.eigvals(A3)))
         A3 += I * (-mineig * k**2 + spacing)
         k += 1
 
@@ -129,7 +129,7 @@ def nearestPD(A):
 def isPD(B):
     """Returns true when input is positive-definite, via Cholesky"""
     try:
-        _ = la.cholesky(B)
+        _ = LA.cholesky(B)
         return True
     except LA.LinAlgError:
         return False
@@ -1110,9 +1110,9 @@ def _create_portfolio_grid(
     weights = []
     sigma = []
     for mu_i in mu:
-        w, var_i = meanVariancePortfolioReturnsTarget(
-            meanVec.squeeze() * 100, sigMat * 100, mu_i * 100, 0, lambda_l1=0.5
-        )
+        w, var_i = portfolio_optimization(meanVec.squeeze() * 100,sigMat * 100,retTarget = mu_i * 100,longShort = 0,maxAlloc=1,lambda_l1=0.5,lambda_l2=0,riskfree = 0,assetsOrder=None,maxShar = 0,
+        turnover = None, w_pre = None, individual = False, exposure_constrain = 0, w_bench = None, factor_exposure_constrain = None, U_factor = None, 
+        general_linear_constrain = None, U_genlinear = 0, w_general = None, TE_constrain = 0, general_quad = 0, Q_w = None, Q_b = None, Q_bench = None)
         weights.append(np.clip(w, 0, 1))
         sigma.append(np.sqrt(var_i * 252 / 100))
 
