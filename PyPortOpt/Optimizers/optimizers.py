@@ -98,41 +98,33 @@ def preprocessData(data):
     return meanVec, sigMat, df_logret
 
 
-def SymPDcovmatrix(A, tol=None):
+def nearestPD(A):
     """
-    function corrects a covariance matrix A to be symmetric positive definite
-    it uses eigenvalue decomposition and shifts all small eigenvalues to tol
-
-    Parameters
-    ----------
-    A : Array like object
-    tol : float
-        (optional, default tol = 1e-04) minimum value for all eigenvalues
-
-    Returns
-    -------
-    A : Array
-        corrected matrix A.
-    e_min : float
-        minimum value for all eigenvalues
+    Find the nearest positive-definite matrix to input
     """
-    m, n = A.shape
-    if n != m:
-        print("Input matrix has to be a square matrix ")
-    if not tol:
-        tol = 1e-04
-    A = (A + A.transpose()) / 2
-    D, V = LA.eig(A)
-    for i in range(len(D)):
-        if D[i] < tol:
-            D[i] = tol
+    if isPD(A):
+        return A
+    B = (A + A.T) / 2
+    _, s, V = la.svd(B)
 
-    D = np.diag(D)
-    t = np.dot(V, D)
-    A = np.dot(t, V.transpose())
-    e_min = max(tol, min(np.diag(D)))
-    A = (A + A.transpose()) / 2
-    return A, e_min
+    H = np.dot(V.T, np.dot(np.diag(s), V))
+
+    A2 = (B + H) / 2
+
+    A3 = (A2 + A2.T) / 2
+
+    if isPD(A3):
+        return A3
+
+    spacing = np.spacing(la.norm(A))
+    I = np.eye(A.shape[0])
+    k = 1
+    while not isPD(A3):
+        mineig = np.min(np.real(la.eigvals(A3)))
+        A3 += I * (-mineig * k**2 + spacing)
+        k += 1
+
+    return A3
 
 
 def sigMatShrinkage(sigMat, lambda_l2):

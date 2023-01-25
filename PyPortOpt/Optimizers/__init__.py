@@ -10,6 +10,7 @@ from .optimizers import (
     preprocessData,
     SymPDcovmatrix,
     sigMatShrinkage,
+    nearestPD,
     Dmat,
     G_learning_portfolio_opt,
     g_learn,
