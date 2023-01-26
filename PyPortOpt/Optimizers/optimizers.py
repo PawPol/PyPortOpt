@@ -15,11 +15,7 @@ from scipy import sparse
 from scipy.stats import norm
 import logging
 from .G_functions import *
-from ._utils import (
-    _create_wealth_grid,
-    _create_weight_function,
-    _expected_value
-)
+from ._utils import _create_wealth_grid, _create_weight_function, _expected_value
 from .reinforce import update_policy_path
 
 
@@ -102,41 +98,41 @@ def preprocessData(data):
     return meanVec, sigMat, df_logret
 
 
-def SymPDcovmatrix(A, tol=None):
+def nearestPD(A):
     """
-    function corrects a covariance matrix A to be symmetric positive definite
-    it uses eigenvalue decomposition and shifts all small eigenvalues to tol
-
-    Parameters
-    ----------
-    A : Array like object
-    tol : float
-        (optional, default tol = 1e-04) minimum value for all eigenvalues
-
-    Returns
-    -------
-    A : Array
-        corrected matrix A.
-    e_min : float
-        minimum value for all eigenvalues
+    Find the nearest positive-definite matrix to input
     """
-    m, n = A.shape
-    if n != m:
-        print("Input matrix has to be a square matrix ")
-    if not tol:
-        tol = 1e-04
-    A = (A + A.transpose()) / 2
-    D, V = LA.eig(A)
-    for i in range(len(D)):
-        if D[i] < tol:
-            D[i] = tol
+    if isPD(A):
+        return A
+    B = (A + A.T) / 2
+    _, s, V = LA.svd(B)
 
-    D = np.diag(D)
-    t = np.dot(V, D)
-    A = np.dot(t, V.transpose())
-    e_min = max(tol, min(np.diag(D)))
-    A = (A + A.transpose()) / 2
-    return A, e_min
+    H = np.dot(V.T, np.dot(np.diag(s), V))
+
+    A2 = (B + H) / 2
+
+    A3 = (A2 + A2.T) / 2
+
+    if isPD(A3):
+        return A3
+
+    spacing = np.spacing(LA.norm(A))
+    I = np.eye(A.shape[0])
+    k = 1
+    while not isPD(A3):
+        mineig = np.min(np.real(LA.eigvals(A3)))
+        A3 += I * (-mineig * k**2 + spacing)
+        k += 1
+
+    return A3
+
+def isPD(B):
+    """Returns true when input is positive-definite, via Cholesky"""
+    try:
+        _ = LA.cholesky(B)
+        return True
+    except LA.LinAlgError:
+        return False
 
 
 def sigMatShrinkage(sigMat, lambda_l2):
@@ -202,319 +198,788 @@ def Dmat(n, k):
     return D
 
 
-def minimumVariancePortfolio(
-    sigMat, longShort, maxAlloc=1, lambda_l1=0, lambda_l2=0, assetsOrder=None
+def constrain_matrix(
+    d,
+    meanvariance=0,
+    maxShar=0,
+    meanVec=None,
+    riskfree=0,
+    assetsOrder=None,
+    maxAlloc=1,
+    longShort=0,
+    lambda_l1=0,
+    turnover=None,
+    w_pre=None,
+    individual=False,
+    exposure_constrain=0,
+    w_bench=None,
+    factor_exposure_constrain=None,
+    U_factor=None,
+    general_linear_constrain=None,
+    U_genlinear=0,
+    w_general=None,
 ):
+
     """
-    Optimizes portfolio for minimum variance
-
-    Parameters
-    ----------
-    SigMat : Matrix
-    LongShort : Float
-        Takes value between 0 and 1
-    maxAlloc : Float
-        Takes value between 0 and 1. Specifies the maximum weight an asset can get
-    lambda_l1 : Float
-        Takes a value greater than 0. Specifies L1 penalty
-    lambda_l2 : Float
-        Takes a value greater than 0. Specifies L2 penalty
-
-    Returns
-    -------
-    w_opt : Array
-        Returns the weights of given to each asset in form of a numpy array
-    var_opt : Float
-        Returns the variance of the portfolio
-    """
-    d = sigMat.shape[0]
-
-    if assetsOrder:
-        temp = sigMat[:, assetsOrder]
-        sigMat = temp[assetsOrder, :]
-    if lambda_l2:
-        sigMat_l2 = sigMatShrinkage(sigMat, lambda_l2)
-        sigMat_l2, e_min = SymPDcovmatrix(sigMat_l2)
-    else:
-        sigMat, e_min = SymPDcovmatrix(sigMat)
-
-    if longShort == 0:
-        Aeq = np.ones(d)
-        Beq = 1
-        LB = np.zeros(d)
-        UB = maxAlloc * np.ones(d)
-        if assetsOrder:
-            L_ine = -np.ones(d - 1)
-            D = np.eye(d - 1, d)
-            for i in range(d - 1):
-                D[i, i + 1] = -1
-            A = -1 * D
-            B = np.zeros(d - 1)
-            A = np.vstack([A, Aeq, np.eye(d)])
-            l = np.hstack([L_ine, Beq, LB])
-            u = np.hstack([B, Beq, UB])
-        else:
-            A = np.vstack([Aeq, np.eye(d)])
-            l = np.hstack([Beq, LB])
-            u = np.hstack([Beq, UB])
-
-        if lambda_l1:
-            meanVec = -lambda_l1 * np.ones(d)
-        else:
-            meanVec = -np.zeros(d)
-
-        if lambda_l2:
-            P = sparse.csc_matrix(sigMat_l2)
-        else:
-            P = sparse.csc_matrix(sigMat)
-
-        A = sparse.csc_matrix(A)
-
-        prob = osqp.OSQP()
-        # Setup workspace
-        prob.setup(P, -meanVec, A, l, u, verbose=False, max_iter = 10000, eps_abs=1e-8, eps_rel = 1e-8,eps_prim_inf = 1e-8,eps_dual_inf = 1e-8)
-        # Solve problem
-        res = prob.solve()
-        w_opt = res.x
-        if not w_opt.all():
-            w_opt = np.ones(d) / d
-
-    elif longShort != 0:
-        A = np.hstack([np.zeros(d), np.ones(d), np.zeros(d)])
-        B = 1 + abs(longShort)
-        Grenze = min(abs(longShort), maxAlloc)
-        if assetsOrder:
-            L_ine = np.hstack([0, -(1 + 2 * Grenze) * np.ones(d - 1)])
-            D = np.eye(d - 1, d)
-            for i in range(d - 1):
-                D[i, i + 1] = -1
-            A = np.vstack([A, np.hstack([-1 * D, np.zeros((d - 1, 2 * d))])])
-            B = np.hstack([B, np.zeros(d - 1)])
-        else:
-            L_ine = 0
-        Aeq = np.vstack(
-            [
-                np.hstack([np.eye(d), -np.eye(d), np.eye(d)]),
-                np.hstack([np.ones(d), np.zeros(d), np.zeros(d)]),
-            ]
-        )
-        Beq = np.hstack([np.zeros(d), 1])
-        LB = np.hstack([-Grenze * np.ones(d), np.zeros(2 * d)])
-        UB = maxAlloc * np.ones(3 * d)
-        if lambda_l2:
-            sigMat3d = np.vstack([
-                np.hstack([sigMat_l2, np.zeros((d, 2 * d))]),
-                np.zeros((2 * d, 3 * d))
-            ])
-        else:
-            sigMat3d = np.vstack([
-                np.hstack([sigMat, np.zeros((d, 2 * d))]),
-                np.zeros((2 * d, 3 * d))
-            ])
-
-        sigMat3d = sigMat3d + np.diag(
-            np.hstack([-0.1 * e_min * np.ones(d), 0.1 * e_min * np.ones(2 * d)])
-        )
-
-        if lambda_l1:
-            meanvec3d = np.hstack([np.zeros(d), -lambda_l1 * np.ones(2 * d)])
-        else:
-            meanvec3d = np.hstack([np.zeros(d), np.zeros(2 * d)])
-
-        A = np.vstack([A, Aeq, np.eye(3 * d)])
-        l = np.hstack([L_ine, Beq, LB])
-        u = np.hstack([B, Beq, UB])
-
-        A = sparse.csc_matrix(A)
-        sigMat3d = sparse.csc_matrix(sigMat3d)
-
-        prob = osqp.OSQP()
-        # Setup workspace
-        prob.setup(sigMat3d, -meanvec3d, A, l, u, verbose=False, eps_abs=1e-8, eps_rel = 1e-8,eps_prim_inf = 1e-8,eps_dual_inf = 1e-8)
-        # Solve problem
-        res = prob.solve()
-        wuv_opt = res.x
-        if not wuv_opt.all():
-            w_opt = np.ones(d) / d
-        else:
-            w_opt = wuv_opt[:d]
-
-    t = np.dot(w_opt, sigMat)
-    Var_opt = np.dot(t, w_opt.transpose())
-    if assetsOrder:
-        w_opt = w_opt[assetsOrder]
-    # if exitflag!=1:
-    # print("minimumVariancePortfolio: Exitflag different than 1 in quadprog")
-    return w_opt, Var_opt
-
-
-def meanVariancePortfolioReturnsTarget(
-        meanVec,
-        sigMat,
-        retTarget,
-        longShort,
-        maxAlloc=1,
-        lambda_l1=0,
-        lambda_l2=0,
-        assetsOrder=None,
-):
-    """
-    Mean-Variance portfolio for a target return
+    This function creates the constraint matrices for an optimization problem, given a set of parameters. 
     
-    Parameters
+    Parameters:
     ----------
-    meanVec : Array
-        A vector of mean returns of assets
-    SigMat : Matrix
-        A covariance matrix of appropriate dimensions
-    retTarget : Float
-        Target return percentage. Values specified between 0 and 100
-    LongShort : Float
-        Takes value between 0 and 1
-    maxAlloc : Float
-        Takes value between 0 and 1. Specifies the maximum weight an asset can get
-    lambda_l1 : Float
-        Takes a value greater than 0. Specifies L1 penalty
-    lambda_l2 : Float
-        Takes a value greater than 0. Specifies L2 penalty
-    Returns
+    d: int
+        Number of assets
+    meanvariance: int or float, optional
+        Mean-variance constraint for the portfolio, defaults to 0
+    maxShar: int or float, optional
+        Maximum sharpe ratio constraint for the portfolio, defaults to 0
+    meanVec: array-like, optional
+        Mean return vector of assets, defaults to None
+    riskfree: int or float, optional
+        Risk free rate, defaults to 0
+    assetsOrder: array-like, optional
+        assets ordering constraints, defaults to None
+    maxAlloc: int or float, optional
+        Maximum allocation in a single asset, defaults to 1
+    longShort: int or float, optional
+        Long-Short constraint for the portfolio, defaults to 0
+    lambda_l1: int or float, optional
+        L1 regularization constraint, defaults to 0
+    turnover: array or float, optional
+        Turnover constraint, defaults to None
+    w_pre: array-like, optional
+        Initial weights, defaults to None
+    exposure_constrain: int or float, optional
+        Exposure constraint, defaults to 0
+    w_bench: array-like, optional
+        Weights of benchmark portfolio, defaults to None
+    factor_exposure_constrain: array-like, optional
+        Factor exposure constraints, defaults to None
+    U_factor: array or float, optional
+        Upper bound on factor exposure, defaults to None
+    general_linear_constrain: array-like, optional
+        General linear constraint, defaults to None
+    U_genlinear: int or float, optional
+        Upper bound on general linear constraint, defaults to 0
+    w_general: array-like, optional
+        Weights of general linear constraint, defaults to None
+    
+    Returns:
     -------
-    w_opt : Array
-        Returns the weights of given to each asset in form of a numpy array
-    var_opt : Float
-        Returns the variance of the portfolio
+    A, l, u: tuple of arrays
+        Constraint matrices for the optimization problem
     """
-    dailyRetTarget = retTarget
-    minEret = min(meanVec)
-    maxEret = max(meanVec)
-    if (dailyRetTarget < minEret) or (maxEret < dailyRetTarget):
-        part1 = minEret
-        part2 = min(maxEret, dailyRetTarget)
-        dailyRetTarget = max(part1, part2)
 
-    d = sigMat.shape[0]
-    if assetsOrder:
-        temp = sigMat[:, assetsOrder]
-        sigMat = temp[assetsOrder, :]
-        meanVec = meanVec[assetsOrder]
-    if lambda_l2:
-        sigMat_l2 = sigMatShrinkage(sigMat, lambda_l2)
-        sigMat_l2, e_min = SymPDcovmatrix(sigMat_l2)
-    else:
-        sigMat, e_min = SymPDcovmatrix(sigMat)
-    # import pdb; pdb.set_trace()
+    # factor_exposure_constrain 1xd vector for time t
     if longShort == 0:
-        Aeq = np.ones(d)
+        Aeq = np.ones(d)  # sum(w) = 1
         Beq = 1
         LB = np.zeros(d)
         UB = maxAlloc * np.ones(d)
 
+        A = np.vstack([Aeq, np.eye(d)])  # 0 < w_i < maxAlloc
+        l = np.hstack([Beq, LB])
+        u = np.hstack([Beq, UB])
+        if maxShar:
+            A = np.vstack(
+                [
+                    A,  # sum(w) = kappa
+                    -np.eye(d),  # w_i >= 0
+                    np.zeros(d),  # kappa > 0
+                    meanVec,
+                ]
+            )  # kappa*w'mu = 1
+            Bwuv = np.hstack(
+                [1, maxAlloc * UB, LB, 1, 0]
+            )  # [w kappa] where kappa>0 is a scalar for the rescaling
+            l = np.hstack([0, -np.inf * np.ones(2 * d + 1), 1])
+            u = np.hstack([np.zeros(2 * d + 1), -1e-12, 1])
+
         if assetsOrder:
+            # ordering constraint w_1 >= w_2 >= w_3 >= ... >= w_d
             L_ine = np.hstack([-np.inf, -np.ones(d - 1)])
-            tau = dailyRetTarget
-            A = -meanVec
-            B = -tau
             A = np.vstack([A, -1 * Dmat(d, 1)])
-            B = np.hstack([B, np.zeros(d - 1)])
-        else:
-            tau = dailyRetTarget
-            A = -meanVec
-            B = -tau
-            L_ine = -np.inf
+            B = np.zeros(d - 1)
+            if maxShar:
+                Bwuv = np.hstack([Bwuv, np.zeros(d - 1)])
 
-        if lambda_l1:
-            meanVec = -lambda_l1 * np.ones(d)
-        else:
-            meanVec = -np.zeros(d)
+            l = np.hstack([l, -np.ones(d - 1)])
+            u = np.hstack([u, B])
 
-        if lambda_l2:
-            P = sparse.csc_matrix(sigMat_l2)
-        else:
-            P = sparse.csc_matrix(sigMat)
+        if meanvariance and meanVec.any():
+            if riskfree:
+                A = np.vstack([A, -meanVec + riskfree])  # w'mu + (1-w)rf > meanvariance
+                l = np.hstack([np.zeros(d + 1), -np.inf])
+                u = np.hstack([u, -meanvariance + riskfree])
+            else:
+                A = np.vstack([A, -meanVec])  # w' * mu > meanvariance
+                l = np.hstack([l, -np.inf])
+                u = np.hstack([u, -meanvariance])
 
-        A = np.vstack([A, Aeq, np.eye(d)])
-        l = np.hstack([L_ine, Beq, LB])
-        u = np.hstack([B, Beq, UB])
-        A = sparse.csc_matrix(A)
+        if U_factor is not None and factor_exposure_constrain is not None:
+            # factor_exposure_constrain can be a d x k matrix and U_factor can be a k length vector
+            A = np.vstack([A, factor_exposure_constrain])  # abs(beta_k' * w) < U
+            l = np.hstack([l, -U_factor])
+            u = np.hstack([u, U_factor])
+            if maxShar:
+                Bwuv = np.hstack([Bwuv, 0])
 
-        prob = osqp.OSQP()
-        # Setup workspace
-        prob.setup(P, -meanVec, A, l, u, verbose=False, max_iter=10000, eps_abs=1e-8, eps_rel=1e-8, eps_prim_inf=1e-8,
-                   eps_dual_inf=1e-8)
-        # Solve problem
-        res = prob.solve()
-        w_opt = res.x
-        if not w_opt.all():
-            w_opt = np.ones(d) / d
+        if U_genlinear > 0 and general_linear_constrain is not None:
+            # A_B (w − w_B ) ≤ u_B
+            A = np.vstack([A, general_linear_constrain])
+            l = np.hstack([l, 0])
+            u = np.hstack(
+                [
+                    u,
+                    U_genlinear
+                    + sum(np.dot(general_linear_constrain, w_general.reshape(-1, 1))),
+                ]
+            )
+            if maxShar:
+                Bwuv = np.hstack([Bwuv, 0])
 
-    elif longShort != 0:
+        if turnover is not None and w_pre is not None:
+            # expend to [w, w_p, w_n]
+            # w_p: w_old-w(w-w_old > 0)
+            # w_n: w-w_old(w-wold < 0)
+            if individual == True:
+                # turnover is a vector abs(w_old_i - w_i) < U_i
+                A = np.hstack([A, np.zeros((len(A), 2 * d))])
+                A = np.vstack(
+                    [
+                        A,
+                        np.hstack(
+                            [np.eye(d), np.eye(d), -np.eye(d)]
+                        ),  # w + w_p - w_n = w_old
+                        np.hstack(
+                            [np.zeros((d, d)), np.eye(d), np.eye(d)]
+                        ),  # abs(w_old-w) < turnover
+                        np.hstack(
+                            [np.zeros((d, d)), np.eye(d), np.zeros((d, d))]
+                        ),  # w_p_i < turnover
+                        np.hstack(
+                            [np.zeros((d, d)), np.zeros((d, d)), np.eye(d)]
+                        ),  # w_n_i < turnover
+                    ]
+                )
+                l = np.hstack([l, w_pre, np.zeros(d), np.zeros(2 * d)])
+                u = np.hstack([u, w_pre, turnover, turnover * np.ones(2 * d)])
+                if maxShar:
+                    Bwuv = np.hstack([Bwuv, np.zeros(4 * d)])
+            else:
+                # turnover is a float sum(w_old - w) < U
+                A = np.hstack([A, np.zeros((len(A), 2 * d))])
+                A = np.vstack(
+                    [
+                        A,
+                        np.hstack([np.eye(d), np.eye(d), -np.eye(d)]),
+                        np.hstack([np.zeros(d), np.ones(d), np.ones(d)]),
+                        np.hstack([np.zeros((d, d)), np.eye(d), np.zeros((d, d))]),
+                        np.hstack([np.zeros((d, d)), np.zeros((d, d)), np.eye(d)]),
+                    ]
+                )
+                l = np.hstack([l, w_pre, 0, np.zeros(2 * d)])
+                u = np.hstack([u, w_pre, turnover, turnover * np.ones(2 * d)])
+                if maxShar:
+                    Bwuv = np.hstack([Bwuv, np.zeros(3 * d + 1)])
+
+        if exposure_constrain > 0 and w_bench is not None:
+            # sum(abs(w - w_bench)) < U
+            A = np.hstack([A, np.zeros((len(A), 2 * d))])
+            A = np.vstack(
+                [
+                    A,
+                    np.hstack([np.eye(d), np.eye(d), -np.eye(d)]),
+                    np.hstack([np.zeros(d), np.ones(d), np.ones(d)]),
+                    np.hstack([np.zeros((d, d)), np.eye(d), np.zeros((d, d))]),
+                    np.hstack([np.zeros((d, d)), np.zeros((d, d)), np.eye(d)]),
+                ]
+            )
+            l = np.hstack([l, w_bench, 0, np.zeros(2 * d)])
+            u = np.hstack(
+                [u, w_bench, exposure_constrain, exposure_constrain * np.ones(2 * d)]
+            )
+            if maxShar:
+                Bwuv = np.hstack([Bwuv, np.zeros(3 * d + 1)])
+
+    else:
+        # the following two auxiliary variables are introduced for the long-short portfolio estimation
+        # u = w.*(w>0) % postive part of w
+        # v = -1*(w.*(w<0)) % negative part of w
         A = np.hstack([np.zeros(d), np.ones(d), np.zeros(d)])
-        B = 1 + abs(longShort)
+        B = 1 + abs(longShort)  # sum of u's <= 1+longShort
         Grenze = min(abs(longShort), maxAlloc)
-
-        if assetsOrder:
-            tau = dailyRetTarget
-            A = np.vstack([A, np.hstack([-meanVec, np.zeros(2 * d)])])
-            B = np.hstack([B, -tau])
-            A = np.vstack([A, np.hstack([-1 * Dmat(d, 1), np.zeros((d - 1, 2 * d))])])
-            B = np.hstack([B, np.zeros(d - 1)])
-            L_ine = np.hstack([0, -np.inf, -(1 + 2 * Grenze) * np.ones(d - 1)])
-        else:
-            tau = dailyRetTarget
-            A = np.vstack([A, np.hstack([-meanVec, np.zeros(2 * d)])])
-            B = np.hstack([B, -tau])
-            L_ine = np.hstack([0, -np.inf])
-
         Aeq = np.vstack(
             [
-                np.hstack([np.eye(d), -np.eye(d), np.eye(d)]),
-                np.hstack([np.ones((1, d)), np.zeros((1, d)), np.zeros((1, d))])
+                np.hstack([np.eye(d), -np.eye(d), np.eye(d)]),  # w - u + v = 0
+                np.hstack([np.ones(d), np.zeros(d), np.zeros(d)]),  # sum(w) = 1
             ]
         )
         Beq = np.hstack([np.zeros(d), 1])
-        LB = np.hstack([-Grenze * np.ones(d), np.zeros(2 * d)])
-        UB = maxAlloc * np.ones(3 * d)
-
-        if lambda_l2:
-            sigMat3d = np.vstack(
-                [np.hstack([sigMat_l2, np.zeros((d, 2 * d))]), np.zeros((2 * d, 3 * d))]
+        LB = np.hstack([-Grenze * np.ones(d), np.zeros(2 * d)])  # w >= -Grenze
+        UB = (1 + Grenze) * np.ones(3 * d)  # [w,u,v] <= (1+Grenze)
+        A = np.vstack([Aeq, A, np.eye(3 * d)])
+        l = np.hstack([Beq, 0, LB])
+        u = np.hstack([Beq, B, UB])
+        if maxShar:
+            A = np.vstack(
+                [
+                    A,
+                    -np.eye(3 * d),
+                    np.zeros(3 * d),
+                    np.hstack([meanVec, np.zeros(2 * d)]),
+                ]
             )
+            Bwuv = np.hstack(
+                [np.zeros(d), 1, (1 + Grenze), UB, -LB, 1, 0]
+            )  # [w u v kappa] where kappa>0 is a scalar for the rescaling
+            l = np.hstack([np.zeros(d + 1), -np.inf * np.ones(6 * d + 2), 1])
+            u = np.hstack([np.zeros(7 * d + 2), -1e-12, 1])
+
+        if assetsOrder:
+            A = np.vstack([A, np.hstack([-1 * Dmat(d, 1), np.zeros((d - 1, 2 * d))])])
+            if maxShar:
+                Bwuv = np.hstack([Bwuv, np.zeros(d - 1)])
+            l = np.hstack([l, -(1 + 2 * Grenze) * np.ones(d - 1)])
+            u = np.hstack([u, np.zeros(d - 1)])
+
+        if meanvariance and meanVec.any():
+            if riskfree:
+                A = np.vstack(
+                    [A, np.hstack([-meanVec + riskfree, np.zeros(2 * d)])]
+                )  # w'mu + (1-w)rf > meanvariance
+                l = np.hstack([np.zeros(d + 1), 0, LB, -np.inf])
+                u = np.hstack([u, -meanvariance + riskfree])
+            else:
+                A = np.vstack(
+                    [A, np.hstack([-meanVec, np.zeros(2 * d)])]
+                )  # w' * mu > meanvariance
+                l = np.hstack([l, -np.inf])
+                u = np.hstack([u, -meanvariance])
+
+        if U_factor is not None and factor_exposure_constrain is not None:
+            # factor_exposure_constrain can be a d x k matrix and U_factor can be a k length vector
+            A = np.vstack(
+                [A, np.hstack([factor_exposure_constrain, np.zeros(2 * d)])]
+            )  # abs(beta_k' * w) < U
+            l = np.hstack([l, -U_factor])
+            u = np.hstack([u, U_factor])
+            if maxShar:
+                Bwuv = np.hstack([Bwuv, 0])
+        if U_genlinear > 0 and general_linear_constrain is not None:
+            # A_B (w − w_B ) ≤ u_B
+            A = np.vstack([A, np.hstack([general_linear_constrain, np.zeros(2 * d)])])
+            l = np.hstack([l, 0])
+            u = np.hstack(
+                [
+                    u,
+                    U_genlinear
+                    + sum(np.dot(general_linear_constrain, w_general.reshape(-1, 1))),
+                ]
+            )
+            if maxShar:
+                Bwuv = np.hstack([Bwuv, 0])
+
+        if turnover is not None and w_pre is not None:
+            # expend to [w, w_p, w_n]
+            # w_p: w_old-w(w-w_old > 0)
+            # w_n: w-w_old(w-wold < 0)
+            if individual == True:
+                A = np.hstack([A, np.zeros((len(A), 2 * d))])
+                A = np.vstack(
+                    [
+                        A,
+                        np.hstack(
+                            [
+                                np.eye(d),
+                                np.zeros((d, d)),
+                                np.zeros((d, d)),
+                                np.eye(d),
+                                -np.eye(d),
+                            ]
+                        ),
+                        np.hstack(
+                            [
+                                np.zeros((d, d)),
+                                np.zeros((d, d)),
+                                np.zeros((d, d)),
+                                np.eye(d),
+                                np.eye(d),
+                            ]
+                        ),
+                        np.hstack(
+                            [
+                                np.zeros((d, d)),
+                                np.zeros((d, d)),
+                                np.zeros((d, d)),
+                                np.eye(d),
+                                np.zeros((d, d)),
+                            ]
+                        ),
+                        np.hstack(
+                            [
+                                np.zeros((d, d)),
+                                np.zeros((d, d)),
+                                np.zeros((d, d)),
+                                np.zeros((d, d)),
+                                np.eye(d),
+                            ]
+                        ),
+                    ]
+                )
+                l = np.hstack([l, w_pre, np.zeros(3 * d)])
+                u = np.hstack(
+                    [
+                        u,
+                        w_pre,
+                        turnover,
+                        np.hstack([turnover, turnover]) * np.ones(2 * d),
+                    ]
+                )
+                if maxShar:
+                    Bwuv = np.hstack([Bwuv, np.zeros(4 * d)])
+            else:
+                A = np.hstack([A, np.zeros((len(A), 2 * d))])
+                A = np.vstack(
+                    [
+                        A,
+                        np.hstack(
+                            [
+                                np.eye(d),
+                                np.zeros((d, d)),
+                                np.zeros((d, d)),
+                                np.eye(d),
+                                -np.eye(d),
+                            ]
+                        ),
+                        np.hstack(
+                            [
+                                np.zeros(d),
+                                np.zeros(d),
+                                np.zeros(d),
+                                np.ones(d),
+                                np.ones(d),
+                            ]
+                        ),
+                        np.hstack(
+                            [
+                                np.zeros((d, d)),
+                                np.zeros((d, d)),
+                                np.zeros((d, d)),
+                                np.eye(d),
+                                np.zeros((d, d)),
+                            ]
+                        ),
+                        np.hstack(
+                            [
+                                np.zeros((d, d)),
+                                np.zeros((d, d)),
+                                np.zeros((d, d)),
+                                np.zeros((d, d)),
+                                np.eye(d),
+                            ]
+                        ),
+                    ]
+                )
+                l = np.hstack([l, w_pre, 0, np.zeros(2 * d)])
+                u = np.hstack([u, w_pre, turnover, turnover * np.ones(2 * d)])
+                if maxShar:
+                    Bwuv = np.hstack([Bwuv, np.zeros(3 * d + 1)])
+
+        if exposure_constrain > 0 and w_bench is not None:
+            # sum(abs(w - w_bench)) < U
+            A = np.hstack([A, np.zeros((len(A), 2 * d))])
+            A = np.vstack(
+                [
+                    A,
+                    np.hstack(
+                        [
+                            np.eye(d),
+                            np.zeros((d, d)),
+                            np.zeros((d, d)),
+                            np.eye(d),
+                            -np.eye(d),
+                        ]
+                    ),
+                    np.hstack(
+                        [np.zeros(d), np.zeros(d), np.zeros(d), np.ones(d), np.ones(d)]
+                    ),
+                    np.hstack(
+                        [
+                            np.zeros((d, d)),
+                            np.zeros((d, d)),
+                            np.zeros((d, d)),
+                            np.eye(d),
+                            np.zeros((d, d)),
+                        ]
+                    ),
+                    np.hstack(
+                        [
+                            np.zeros((d, d)),
+                            np.zeros((d, d)),
+                            np.zeros((d, d)),
+                            np.zeros((d, d)),
+                            np.eye(d),
+                        ]
+                    ),
+                ]
+            )
+            l = np.hstack([l, w_bench, 0, np.zeros(2 * d)])
+            u = np.hstack(
+                [u, w_bench, exposure_constrain, exposure_constrain * np.ones(2 * d)]
+            )
+            if maxShar:
+                Bwuv = np.hstack([Bwuv, np.zeros(3 * d + 1)])
+
+    if maxShar:
+        # add kappa to constrain matrix
+        A = np.hstack([A, -Bwuv.reshape(-1, 1)])
+
+    return A, l, u
+
+
+def penalty_vector(
+    d,
+    sigMat,
+    maxShar=0,
+    longShort=0,
+    lambda_l1=0,
+    turnover=None,
+    exposure_constrain=0,
+    TE_constrain=None,
+    Q_b=None,
+    Q_bench=None,
+):
+    """
+    This function calculates the penalty vector for an optimization problem, given a set of parameters. 
+    
+    Parameters:
+    ----------
+    d: int
+        Number of assets
+    sigMat: array-like
+        Covariance matrix of assets
+    longShort: int or float, optional
+        Long-Short constraint for the portfolio, defaults to 0
+    lambda_l1: int or float, optional
+        L1 regularization term, defaults to 0
+    turnover: array or float, optional
+        Turnover constraint, defaults to None
+    exposure_constrain: int or float, optional
+        Exposure constraint, defaults to 0
+    TE_constrain: array-like, optional
+        Tracking error constraint, defaults to None
+    Q_b: array-like, optional
+        Quadratic term for bias, defaults to None
+    Q_bench: array-like, optional
+        Benchmark for quadratic term, defaults to None
+    
+    Returns:
+    -------
+    meanVec: array
+        Penalty vector
+    """
+    if longShort == 0:
+        if lambda_l1:
+            # lambda_l1 * w
+            meanVec = -lambda_l1 * np.ones(d)
         else:
-            sigMat3d = np.vstack(
+            meanVec = -np.zeros(d)
+        if TE_constrain:
+            # (w − wB )′Σ(w − wB )
+            meanVec = meanVec + 2 * np.dot(TE_constrain, sigMat)
+        if turnover is not None or exposure_constrain:
+            # expend the weight vector
+            meanVec = np.hstack([meanVec, np.zeros(2 * d)])
+        if Q_b:
+            meanVec = meanVec + 2 * np.dot(Q_bench, Q_b)
+    else:
+        if lambda_l1:
+            # lambda_l1 * (u+v)
+            meanVec = np.hstack([np.zeros(d), -lambda_l1 * np.ones(2 * d)])
+        else:
+            meanVec = np.hstack([np.zeros(d), np.zeros(2 * d)])
+        if TE_constrain:
+            meanVec = meanVec + np.hstack(
+                [
+                    np.zeros(d),
+                    np.dot(TE_constrain, sigMat),
+                    -np.dot(TE_constrain, sigMat),
+                ]
+            )
+        if turnover is not None or exposure_constrain:
+            meanVec = np.hstack([meanVec, np.zeros(2 * d)])
+        if Q_b:
+            meanVec = meanVec + np.hstack(
+                [np.zeros(d), np.dot(Q_bench, Q_b), -np.dot(Q_bench, Q_b)]
+            )
+    if maxShar:
+        meanVec = np.hstack([meanVec, 0])
+    return meanVec
+
+
+def sigMat_expend(
+    d,
+    sigMat,
+    maxShar=0,
+    longShort=0,
+    turnover=None,
+    exposure_constrain=0,
+    TE_constrain=0,
+    general_quad=0,
+    Q_w=None,
+    Q_b=None,
+):
+    """
+    This function expands the covariance matrix for an optimization problem, given a set of parameters. 
+    
+    Parameters:
+    ----------
+    d: int
+        Number of assets
+    sigMat: array-like
+        Covariance matrix of assets
+    longShort: int or float, optional
+        Long-Short constraint for the portfolio, defaults to 0
+    turnover: array or float, optional
+        Turnover constraint, defaults to None
+    exposure_constrain: int or float, optional
+        Exposure constraint, defaults to 0
+    TE_constrain: int or float, optional
+        Tracking error constraint, defaults to 0
+    general_quad: int or float, optional
+        General quadratic constraint, defaults to 0
+    Q_w: array-like, optional
+        Quadratic term for weights, defaults to None
+    Q_b: array-like, optional
+        Quadratic term for bias, defaults to None
+    
+    Returns:
+    -------
+    sigMat: array
+        Expanded covariance matrix
+    """
+    if Q_w:
+        sigMat += Q_w
+    if Q_b:
+        sigMat += Q_b
+    if longShort == 0:
+        if turnover is not None or exposure_constrain:
+            sigMat = np.vstack(
                 [np.hstack([sigMat, np.zeros((d, 2 * d))]), np.zeros((2 * d, 3 * d))]
             )
-
-        sigMat3d = sigMat3d + np.diag(
-            np.hstack([-0.1 * e_min * np.ones(d), 0.1 * e_min * np.ones(2 * d)])
+        if TE_constrain or general_quad:
+            sigMat *= 2
+    else:
+        sigMat = np.vstack(
+            [np.hstack([sigMat, np.zeros((d, 2 * d))]), np.zeros((2 * d, 3 * d))]
         )
+        if turnover is not None or exposure_constrain:
+            sigMat = np.vstack(
+                [
+                    np.hstack([sigMat, np.zeros((3 * d, 2 * d))]),
+                    np.zeros((2 * d, 5 * d)),
+                ]
+            )
+        if TE_constrain or general_quad:
+            sigMat *= 2
+    if maxShar:
+        # add kappa
+        sigMat = np.vstack(
+            [
+                np.hstack([sigMat, np.zeros((sigMat.shape[0], 1))]),
+                np.zeros(sigMat.shape[0] + 1),
+            ]
+        )
+    return sigMat
 
-        if lambda_l1:
-            meanvec3d = np.hstack([np.zeros(d), -lambda_l1 * np.ones(2 * d)])
-        else:
-            meanvec3d = np.hstack([np.zeros(d), np.zeros(2 * d)])
 
-        A = np.vstack([A, Aeq, np.eye(3 * d)])
-        l = np.hstack([L_ine, Beq, LB])
-        u = np.hstack([B, Beq, UB])
-        A = sparse.csc_matrix(A)
-        sigMat3d = sparse.csc_matrix(sigMat3d)
-        prob = osqp.OSQP()
-        # Setup workspace
-        prob.setup(sigMat3d, -meanvec3d, A, l, u, verbose=False, eps_abs=1e-8, eps_rel=1e-8, eps_prim_inf=1e-8,
-                   eps_dual_inf=1e-8)
-        # Solve problem
-        res = prob.solve()
-        wuv_opt = res.x
-        if not wuv_opt.all():
-            w_opt = np.ones(d) / d
-        else:
-            w_opt = wuv_opt[:d]
-    t = np.dot(w_opt, sigMat)
-    Var_opt = np.dot(t, w_opt.transpose())
+def portfolio_optimization(
+    meanVec,
+    sigMat,
+    retTarget,
+    longShort,
+    maxAlloc=1,
+    lambda_l1=0,
+    lambda_l2=0,
+    riskfree=0,
+    assetsOrder=None,
+    maxShar=0,
+    turnover=None,
+    w_pre=None,
+    individual=False,
+    exposure_constrain=0,
+    w_bench=None,
+    factor_exposure_constrain=None,
+    U_factor=None,
+    general_linear_constrain=None,
+    U_genlinear=0,
+    w_general=None,
+    TE_constrain=0,
+    general_quad=0,
+    Q_w=None,
+    Q_b=None,
+    Q_bench=None,
+):
+    """
+    function do the portfolio optimization
+
+    Parameters
+    ----------
+    retTarget : Float
+        Target returns in percentage for optimizer. Takes values between 0 and 100
+    LongShort : Float
+        Takes value between 0 and 1
+    sigMat: array-like
+        Covariance matrix of assets
+    maxAlloc : Float
+        Takes value between 0 and 1. Specifies the maximum weight an asset can get
+    lambda_l1 : Float
+        Takes a value greater than 0. Specifies L1 penalty
+    lambda_l2 : Float
+        Takes a value greater than 0. Specifies L2 penalty
+    maxShar: int or float, optional
+        Maximum sharpe ratio constraint for the portfolio, defaults to 0
+    meanVec: array-like, optional
+        Mean return vector of assets, defaults to None
+    riskfree: int or float, optional
+        Risk free rate, defaults to 0
+    assetsOrder: array-like, optional
+        assets ordering constraints, defaults to None
+    individual : bool
+        Individual turnover constrain, defaults to None
+    turnover: array or float, optional
+        Turnover constraint, defaults to None
+    w_pre: array-like, optional
+        Initial weights, defaults to None
+    exposure_constrain: int or float, optional
+        Exposure constraint, defaults to 0
+    w_bench: array-like, optional
+        Weights of benchmark portfolio, defaults to None
+    factor_exposure_constrain: array-like, optional
+        Factor exposure constraints, defaults to None
+    U_factor: array or float, optional
+        Upper bound on factor exposure, defaults to None
+    general_linear_constrain: array-like, optional
+        General linear constraint, defaults to None
+    U_genlinear: int or float, optional
+        Upper bound on general linear constraint, defaults to 0
+    w_general: array-like, optional
+        Weights of general linear constraint, defaults to None
+    TE_constrain: int or float, optional
+        Tracking error constraint, defaults to 0
+    general_quad: int or float, optional
+        General quadratic constraint, defaults to 0
+    Q_w: array-like, optional
+        Quadratic term for weights, defaults to None
+    Q_b: array-like, optional
+        Quadratic term for bias, defaults to None
+    Q_bench: array-like, optional
+        Benchmark for quadratic term, defaults to None
+    Returns
+    -------
+    w_opt : Array
+        Returns the weights of given to each asset in form of a numpy array
+    var_opt : Float
+        Returns the variance of the portfolio
+    """
+    if retTarget:
+        dailyRetTarget = retTarget
+        minEret = min(meanVec)
+        maxEret = max(meanVec)
+        if (dailyRetTarget < minEret) or (maxEret < dailyRetTarget):
+            part1 = minEret
+            part2 = min(maxEret, dailyRetTarget)
+            dailyRetTarget = max(part1, part2)
+
+    d = sigMat.shape[0]
+    if assetsOrder:
+        temp = sigMat[:, assetsOrder]
+        sigMat = temp[assetsOrder, :]
+        if retTarget or maxShar:
+            meanVec = meanVec[assetsOrder]
+    if lambda_l2:
+        sigMat_shrik = sigMatShrinkage(sigMat, lambda_l2)
+        sigMat_shrik = nearestPD(sigMat_shrik)
+    else:
+        sigMat_shrik = nearestPD(sigMat)
+    # import pdb; pdb.set_trace()
+
+    A, l, u = constrain_matrix(
+        d,
+        retTarget,
+        maxShar,
+        meanVec,
+        riskfree,
+        assetsOrder,
+        maxAlloc,
+        longShort,
+        lambda_l1,
+        turnover,
+        w_pre,
+        individual,
+        exposure_constrain,
+        w_bench,
+        factor_exposure_constrain,
+        U_factor,
+        general_linear_constrain,
+        U_genlinear,
+        w_general,
+    )
+    sigMat_exp = sigMat_expend(
+        d,
+        sigMat_shrik,
+        maxShar,
+        longShort,
+        turnover,
+        exposure_constrain,
+        TE_constrain,
+        general_quad,
+        Q_w,
+        Q_b,
+    )
+    meanVec = penalty_vector(
+        d,
+        sigMat_shrik,
+        maxShar,
+        longShort,
+        lambda_l1,
+        turnover,
+        exposure_constrain,
+        TE_constrain,
+        Q_b,
+        Q_bench,
+    )
+
+    P = sparse.csc_matrix(sigMat_exp)
+    A = sparse.csc_matrix(A)
+    prob = osqp.OSQP()
+    # Setup workspace
+    prob.setup(
+        P,
+        -meanVec,
+        A,
+        l,
+        u,
+        verbose=False,
+        max_iter=10000,
+        eps_abs=1e-8,
+        eps_rel=1e-8,
+        eps_prim_inf=1e-8,
+        eps_dual_inf=1e-8,
+    )
+    # Solve problem
+    res = prob.solve()
+    w_opt = res.x
+    if not w_opt.all():
+        w_opt = np.ones(d) / d
+
+    if maxShar:
+        w_opt = w_opt[:d] / w_opt[-1]
+    else:
+        w_opt = w_opt[:d]
+    Var_opt = np.dot(np.dot(w_opt, sigMat), w_opt.transpose())
     if assetsOrder:
         w_opt = w_opt[assetsOrder]
-    # if exitflag!=1:
-    # print("minimumVariancePortfolio: Exitflag different than 1 in quadprog")
+
     return w_opt, Var_opt
 
 
@@ -645,9 +1110,9 @@ def _create_portfolio_grid(
     weights = []
     sigma = []
     for mu_i in mu:
-        w, var_i = meanVariancePortfolioReturnsTarget(
-            meanVec.squeeze() * 100, sigMat * 100, mu_i * 100, 0, lambda_l1=0.5
-        )
+        w, var_i = portfolio_optimization(meanVec.squeeze() * 100,sigMat * 100,retTarget = mu_i * 100,longShort = 0,maxAlloc=1,lambda_l1=0.5,lambda_l2=0,riskfree = 0,assetsOrder=None,maxShar = 0,
+        turnover = None, w_pre = None, individual = False, exposure_constrain = 0, w_bench = None, factor_exposure_constrain = None, U_factor = None, 
+        general_linear_constrain = None, U_genlinear = 0, w_general = None, TE_constrain = 0, general_quad = 0, Q_w = None, Q_b = None, Q_bench = None)
         weights.append(np.clip(w, 0, 1))
         sigma.append(np.sqrt(var_i * 252 / 100))
 
@@ -870,13 +1335,11 @@ def rollingwindow_backtest(
     window_size,
     rebalance_time,
     maxAlloc=1,
-    riskAversion=0,
     meanQuantile=0,
     retTarget=0,
     longShort=0,
     lambda_l1=0,
     lambda_l2=0,
-    assetsOrder=None,
     initialWealth=100,
     wealthGoal=200,
     cashInjection=0,
@@ -885,7 +1348,7 @@ def rollingwindow_backtest(
     numPortOpt=15,
     gridGranularity=10,
     useEmpDist=False,
-    hParams = None,
+    hParams=None,
     g_steps=12,
     g_goal_rate=0.8,
     g_lambda=0.001,
@@ -893,7 +1356,25 @@ def rollingwindow_backtest(
     g_eta=1.5,
     g_rho=0.4,
     g_beta=1000.0,
-    g_gamma=0.95
+    g_gamma=0.95,
+    riskfree=0,
+    assetsOrder=None,
+    maxShar=0,
+    turnover=None,
+    w_pre=None,
+    individual=False,
+    exposure_constrain=0,
+    w_bench=None,
+    factor_exposure_constrain=None,
+    U_factor=None,
+    general_linear_constrain=None,
+    U_genlinear=0,
+    w_general=None,
+    TE_constrain=0,
+    general_quad=0,
+    Q_w=None,
+    Q_b=None,
+    Q_bench=None,
 ):
     """
     function do the rolling window back test
@@ -908,10 +1389,6 @@ def rollingwindow_backtest(
         parameter for the size of rolling window (>=2)
     rebalance_time : int
         rebalance time of rolling window test
-    maxAlloc : Float
-        maximum allocation. Takes values between 0 and 1
-    riskAversion : Float
-        Risk Aversion for your portfolio. Takes values greater than 0
     meanQuantile : Float
         Takes values between 0 and 1
     RetTarget : Float
@@ -957,6 +1434,44 @@ def rollingwindow_backtest(
         The parameter to determine the strength of entropy regularization
     g_gamma : Float
         The discount factor in accumulative reward function
+    maxShar: int or float, optional
+        Maximum sharpe ratio constraint for the portfolio, defaults to 0
+    meanVec: array-like, optional
+        Mean return vector of assets, defaults to None
+    riskfree: int or float, optional
+        Risk free rate, defaults to 0
+    assetsOrder: array-like, optional
+        assets ordering constraints, defaults to None
+    individual : bool
+        Individual turnover constrain, defaults to None
+    turnover: array or float, optional
+        Turnover constraint, defaults to None
+    w_pre: array-like, optional
+        Initial weights, defaults to None
+    exposure_constrain: int or float, optional
+        Exposure constraint, defaults to 0
+    w_bench: array-like, optional
+        Weights of benchmark portfolio, defaults to None
+    factor_exposure_constrain: array-like, optional
+        Factor exposure constraints, defaults to None
+    U_factor: array or float, optional
+        Upper bound on factor exposure, defaults to None
+    general_linear_constrain: array-like, optional
+        General linear constraint, defaults to None
+    U_genlinear: int or float, optional
+        Upper bound on general linear constraint, defaults to 0
+    w_general: array-like, optional
+        Weights of general linear constraint, defaults to None
+    TE_constrain: int or float, optional
+        Tracking error constraint, defaults to 0
+    general_quad: int or float, optional
+        General quadratic constraint, defaults to 0
+    Q_w: array-like, optional
+        Quadratic term for weights, defaults to None
+    Q_b: array-like, optional
+        Quadratic term for bias, defaults to None
+    Q_bench: array-like, optional
+        Benchmark for quadratic term, defaults to None
     Returns
     -------
     R : 2d array
@@ -999,34 +1514,46 @@ def rollingwindow_backtest(
     Q = None
 
     for rebalCount, i in enumerate(range(start, n, d)):
-        logger.info(f"Rebalance number {rebalCount} on day {i}")
+        # logger.info(f"Rebalance number {rebalCount} on day {i}")
         k = 0
         w_opt = np.zeros(df1.shape[1])
-        
+
         window = df_logret[i - window_size : i].copy().dropna(axis=1)
         sample_stocks = window.columns
         logret_window = window.values
         sigMat = np.cov(logret_window, rowvar=False)
         meanVec = np.mean(logret_window, axis=0)
 
-        if optimizerName == "minimumVariancePortfolio":
-            w_sample, _ = minimumVariancePortfolio(
-                sigMat,
-                float(maxAlloc),
-                float(longShort),
-                float(lambda_l1),
-                float(lambda_l2),
-            )
-
-        elif optimizerName == "meanVariancePortfolioReturnsTarget":
-            w_sample, _ = meanVariancePortfolioReturnsTarget(
+        if (
+            optimizerName == "minimumVariancePortfolio"
+            or optimizerName == "meanVariancePortfolioReturnsTarget"
+        ):
+            w_sample, _ = portfolio_optimization(
                 meanVec,
                 sigMat,
                 float(retTarget),
-                float(maxAlloc),
                 float(longShort),
+                float(maxAlloc),
                 float(lambda_l1),
                 float(lambda_l2),
+                float(riskfree),
+                assetsOrder,
+                maxShar,
+                turnover,
+                w_pre,
+                individual,
+                float(exposure_constrain),
+                w_bench,
+                factor_exposure_constrain,
+                U_factor,
+                general_linear_constrain,
+                float(U_genlinear),
+                w_general,
+                float(TE_constrain),
+                float(general_quad),
+                Q_w,
+                Q_b,
+                Q_bench,
             )
         elif optimizerName == "dynamic_programming":
             if rebalCount % stratUpdateFreq == 0:
@@ -1071,32 +1598,45 @@ def rollingwindow_backtest(
                     shrinkage=lambda_l2,
                     Q=Q,
                     returns=returns,
-                    hParams=hParams
+                    hParams=hParams,
                 )
-                logger.info(f"Probability of success {Q[:, 0, :].max()*100:.2f}%")
+                # logger.info(f"Probability of success {Q[:, 0, :].max()*100:.2f}%")
             sample_stocks = strat_sample_stocks
             w_sample = w_func(currentWealth, rebalCount % stratUpdateFreq)
 
         elif optimizerName == "G-learning":
             if i == start:
                 g_learner = g_learn(
-                    num_steps=g_steps, rebalance_time=d, num_risky_assets=logret.shape[1],
-                    x_vals_init=initialWealth*np.ones(logret.shape[1]) / logret.shape[1],
-                    lambd=g_lambda, omega=g_omega, eta=g_eta, rho=g_rho,
-                    beta=g_beta, gamma=g_gamma, target_return=g_goal_rate
+                    num_steps=g_steps,
+                    rebalance_time=d,
+                    num_risky_assets=logret.shape[1],
+                    x_vals_init=initialWealth
+                    * np.ones(logret.shape[1])
+                    / logret.shape[1],
+                    lambd=g_lambda,
+                    omega=g_omega,
+                    eta=g_eta,
+                    rho=g_rho,
+                    beta=g_beta,
+                    gamma=g_gamma,
+                    target_return=g_goal_rate,
                 )
-            if i+d <= n:
+            if i + d <= n:
                 w_sample, g_learner = g_learn_rolling(
-                    t=int((i-start)/d % g_learner.num_steps), g_learner=g_learner,
-                    exp_returns=meanVec*d, sigma=sigMat*d,
-                    returns=np.cumprod(ret[i:i+d]+1, axis=0)-1
+                    t=int((i - start) / d % g_learner.num_steps),
+                    g_learner=g_learner,
+                    exp_returns=meanVec * d,
+                    sigma=sigMat * d,
+                    returns=np.cumprod(ret[i : i + d] + 1, axis=0) - 1,
                 )
             else:
                 d_final = n - i
                 w_sample, g_learner = g_learn_rolling(
-                    t=int((i-start)/d % g_learner.num_steps), g_learner=g_learner,
-                    exp_returns=meanVec*d_final, sigma=sigMat*d_final,
-                    returns=np.cumprod(ret[i:i+d_final]+1, axis=0)-1
+                    t=int((i - start) / d % g_learner.num_steps),
+                    g_learner=g_learner,
+                    exp_returns=meanVec * d_final,
+                    sigma=sigMat * d_final,
+                    returns=np.cumprod(ret[i : i + d_final] + 1, axis=0) - 1,
                 )
 
         else:
@@ -1124,7 +1664,7 @@ def rollingwindow_backtest(
             logret_sample = np.nan_to_num(logret[i:], nan=0)
             simple_returns = np.exp(logret_sample) - 1
             R = np.hstack([R, w_opt.dot(simple_returns.T)])
-
+        w_pre = w_opt.reshape(1, -1)
         currentWealth = initialWealth * (1 + R).cumprod()[-1]
 
     rownames = df1.index[start + 1 :]
